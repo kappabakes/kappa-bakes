@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ClearCheckoutStash } from "./ClearCheckoutStash";
 import Image from "next/image";
 import { db } from "@/lib/stock";
 import {
@@ -78,6 +79,7 @@ export default async function Confirmed({
 
   return (
     <main className="bg-cream py-12">
+      <ClearCheckoutStash />
       <div className="mx-auto max-w-3xl px-5">
         <div className="text-center">
           <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border-2 border-good text-3xl text-good">

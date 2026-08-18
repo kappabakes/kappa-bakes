@@ -151,13 +151,33 @@ function OrderPageInner() {
    * half an hour to everyone else.
    */
   useEffect(() => {
-    if (params.get("cancelled") !== "1") return;
-    const sessionId = params.get("session_id");
+    // Either Stripe sent them back with the id, or we stashed it on the way
+    // out. The second covers the browser's own back button.
+    const fromUrl =
+      params.get("cancelled") === "1" ? params.get("session_id") : null;
 
-    // Tidy the address bar either way, so a refresh doesn't repeat this.
-    window.history.replaceState(null, "", "/order");
+    let stashed: string | null = null;
+    try {
+      stashed = sessionStorage.getItem("kb-checkout-session");
+    } catch {
+      /* private browsing */
+    }
+
+    const sessionId = fromUrl ?? stashed;
+
+    // Tidy the address bar so a refresh doesn't repeat this.
+    if (params.get("cancelled")) window.history.replaceState(null, "", "/order");
 
     if (!sessionId) return;
+
+    try {
+      sessionStorage.removeItem("kb-checkout-session");
+    } catch {
+      /* private browsing */
+    }
+
+    // Safe on a session they actually paid for: the route only closes one
+    // that's still open, and leaves a completed payment alone.
     fetch("/api/checkout/cancel", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -303,7 +323,12 @@ function OrderPageInner() {
     }
 
     const raw = await res.text();
-    let data: { url?: string; orderNo?: string; error?: string } = {};
+    let data: {
+      url?: string;
+      orderNo?: string;
+      sessionId?: string;
+      error?: string;
+    } = {};
     try {
       data = JSON.parse(raw);
     } catch {
@@ -331,6 +356,20 @@ function OrderPageInner() {
     const looksUsable =
       typeof url === "string" &&
       (url.startsWith("/") || url.startsWith("http"));
+
+    /*
+     * Remember the session before leaving. Stripe's own back link returns the
+     * id in the URL, but a browser back button doesn't — and that's how most
+     * people come back. Without this their slices sit held until the session
+     * expires.
+     */
+    if (data.sessionId) {
+      try {
+        sessionStorage.setItem("kb-checkout-session", data.sessionId);
+      } catch {
+        // Private browsing can refuse. The sweep catches it instead.
+      }
+    }
 
     if (looksUsable) window.location.href = url;
     else if (data.orderNo)

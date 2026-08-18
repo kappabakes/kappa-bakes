@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
  * been sitting open a while — long enough that a genuinely slow payer isn't
  * cut off part-way through entering their card.
  */
-const ABANDONED_AFTER_MINUTES = 5;
+const ABANDONED_AFTER_MINUTES = 3;
 
 export async function GET(req: Request) {
   const auth = req.headers.get("authorization");

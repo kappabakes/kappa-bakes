@@ -286,5 +286,8 @@ async function handle(req: Request) {
     data: { stripeSessionId: session.id },
   });
 
-  return NextResponse.json({ url: session.url, orderNo });
+  // The session id goes back so the browser can remember it. Stripe's own
+  // back link returns it in the URL, but a browser back button doesn't — and
+  // that's the more common way out.
+  return NextResponse.json({ url: session.url, orderNo, sessionId: session.id });
 }
