@@ -1,0 +1,302 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  CANCELLED
+  COLLECTED
+  NO_SHOW
+}
+
+/// The menu. Managed entirely from /admin — nothing here lives in code.
+/// Sauces and toppings you can offer on top of a flavour. Priced individually
+/// and managed in the admin, so a new sauce needs no deploy.
+enum ExtraKind {
+  SAUCE
+  TOPPING
+}
+
+model Extra {
+  id         String    @id @default(cuid())
+  kind       ExtraKind
+  name       String
+  pricePence Int
+  active     Boolean   @default(true)
+  sortOrder  Int       @default(0)
+
+  @@index([kind, active])
+}
+
+model Flavour {
+  id          String  @id @default(cuid())
+  name        String
+  description String  @default("")
+  pricePence  Int
+  hasToppings Boolean @default(true)
+  /// Allergen ids from ALLERGENS in lib/config.ts
+  allergens   String[]
+  /// Photo of the slice. Path under /public, or a Blob URL from the admin.
+  image       String?
+  /// The name drawn as a wordmark, used on the menu page only. The text name
+  /// above is still what appears in emails, texts, order records and the day
+  /// sheet — an image can't go in a text message.
+  nameImage   String?
+  /// Most of this flavour one person can order — for a limited special.
+  /// Null means no limit of its own; the day's limit still applies.
+  maxPerOrder Int?
+  /// Whether toppings and sauces can go in a tub rather than on the slice.
+  /// Off for anything that has to be dressed at the counter — a special
+  /// where a tub doesn't work.
+  allowSeparate Boolean @default(true)
+  /// Whether "extra sauce" is offered. Only meaningful on a flavour that
+  /// comes with a sauce already.
+  hasExtraSauce Boolean @default(true)
+  /// Which sauces can be added to this flavour. Empty means the Add Sauce
+  /// option doesn't appear — used for specials that come without a sauce.
+  sauceIds    String[] @default([])
+  /// Which toppings can be added. Empty means Add Toppings doesn't appear.
+  toppingIds  String[] @default([])
+  /// How many different toppings one slice can carry.
+  maxToppings Int      @default(2)
+  /// Default stock for this flavour on any date. A per-date figure set in
+  /// Collection Dates overrides it.
+  ///
+  /// A flavour with its own stock has its own pool: those slices do NOT come
+  /// out of the day's total. A special limited to 8 sits alongside the day's
+  /// other slices rather than eating into them.
+  ///
+  /// Null means no separate stock — it draws on the day's total like the rest.
+  stockPerDay Int?
+  /// Removed flavours are archived, never deleted — old orders reference them.
+  active      Boolean @default(true)
+  sortOrder   Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([active, sortOrder])
+}
+
+/// A day the shop is open for collection. Created either one-off by hand or
+/// generated from a RecurringSlot — but always needs confirming before it
+/// takes orders.
+model CollectionDay {
+  id        String   @id @default(cuid())
+  day       DateTime @unique
+  capacity  Int
+  startTime String
+  endTime   String
+  /// When the "running low" email went out for this date. Stops an hourly
+  /// job sending the same nudge every hour.
+  nudgeSentAt DateTime?
+  /// Archived by hand before the day is over — everything's collected and
+  /// there's no reason for it to keep cluttering the orders screen.
+  archivedAt DateTime?
+  /// Orders close at this moment — you bake the day before, so this is
+  /// usually the evening before collection. Must be set before confirming.
+  cutoff    DateTime?
+  /// Most slices one person can order on this date. Null falls back to the
+  /// shop-wide setting.
+  maxPerOrder Int?
+  /// You've checked the date, times and cut-off, and released it for ordering.
+  confirmed Boolean  @default(false)
+  /// Confirmed days can still be pulled without losing their settings.
+  open      Boolean  @default(true)
+  note      String?
+  /// Which recurring slot generated this, if any.
+  fromSlot  String?
+
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
+/// "Every Saturday, 32 slices, 2-4pm." Generates CollectionDays four weeks
+/// ahead, unconfirmed, for you to review.
+model RecurringSlot {
+  id        String  @id @default(cuid())
+  /// 0 = Sunday ... 6 = Saturday
+  weekday   Int     @unique
+  capacity  Int
+  startTime String
+  endTime   String
+  active    Boolean @default(true)
+}
+
+model Order {
+  id         String      @id @default(cuid())
+  orderNo    String      @unique
+  firstName  String
+  lastName   String
+  mobile     String
+  email      String
+  day        DateTime
+  /// Snapshot: [{ flavourId, flavour, toppings, pricePence, allergens }].
+  /// Snapshotted so removing a flavour never rewrites history.
+  slices     Json
+  sliceCount Int
+  totalPence Int
+  status     OrderStatus @default(PENDING)
+  notes      String?
+  adminNotes String?
+
+  /// Cancellation. Recorded so the order record and the tracking page can both
+  /// say when it happened and why.
+  cancelledAt   DateTime?
+  /// "CUSTOMER" or "OTHER"
+  cancelReason  String?
+  /// Free text: the customer's message, or your own explanation.
+  cancelNote    String?
+  /// Made by the test tools rather than a real customer. Counts against stock
+  /// like any other order, so sold-out states can be rehearsed, but can be
+  /// wiped in one go.
+  isTest     Boolean @default(false)
+  /// Added by hand in the admin rather than paid for online — a friend, a
+  /// cash sale, a freebie. Counts against stock like any other order.
+  isManual   Boolean @default(false)
+  /// "Free", "Cash", "Bank transfer" — how a manual order was settled.
+  paymentMethod String?
+
+  stripeSessionId String?   @unique
+  stripePaymentId String?
+  reservedUntil   DateTime?
+
+  policyAcceptedAt   DateTime?
+  policyText         String?
+  allergenAcceptedAt DateTime?
+  allergenText       String?
+  ipAddress          String?
+  userAgent          String?
+
+  confirmSentAt DateTime?
+  smsStatus     String?
+  emailStatus   String?
+  /// Collection-morning reminder. Set once so a rerun can't send it twice.
+  reminderSentAt DateTime?
+  events OrderEvent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([day, status])
+  @@index([lastName])
+}
+
+model OrderEvent {
+  id      String   @id @default(cuid())
+  orderId String
+  order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  kind    String
+  detail  String?
+  at      DateTime @default(now())
+
+  @@index([orderId, at])
+}
+
+model Customer {
+  email     String  @id
+  firstName String
+  lastName  String
+  mobile    String?
+
+  marketingOptIn Boolean   @default(false)
+  optInAt        DateTime?
+  unsubscribedAt DateTime?
+  unsubToken     String    @unique @default(cuid())
+
+  orderCount  Int       @default(0)
+  lastOrderAt DateTime?
+  totalPence  Int       @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([marketingOptIn, unsubscribedAt])
+}
+
+model Campaign {
+  id        String   @id @default(cuid())
+  subject   String
+  body      String
+  segment   String
+  sentCount Int
+  failCount Int
+  sentAt    DateTime @default(now())
+}
+
+/// One-time sign-in codes. Hashed, short-lived, single-use.
+model AdminCode {
+  id        String   @id @default(cuid())
+  email     String
+  codeHash  String
+  expiresAt DateTime
+  usedAt    DateTime?
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([email, expiresAt])
+}
+
+/// A passkey — Face ID or Touch ID on one of your devices. The private half
+/// never leaves the device (and syncs via iCloud Keychain); we only ever hold
+/// the public half, which is useless to anyone who steals it.
+model Passkey {
+  id           String   @id @default(cuid())
+  email        String
+  credentialId String   @unique
+  publicKey    Bytes
+  counter      Int      @default(0)
+  transports   String[]
+  /// "Suf's iPhone", so you know which one to remove.
+  label        String
+  createdAt    DateTime @default(now())
+  lastUsedAt   DateTime?
+
+  @@index([email])
+}
+
+/// Short-lived challenge for a registration or sign-in attempt. Single use —
+/// this is what stops a captured response being replayed later.
+model WebAuthnChallenge {
+  id        String   @id @default(cuid())
+  challenge String
+  email     String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+/// Values you can change from /admin without a deploy. Key/value so adding
+/// another setting later needs no migration.
+model Setting {
+  key   String @id
+  value String
+}
+
+/// How many of one flavour you're making on one particular date. Overrides
+/// the flavour's own default, so a special can be 6 on Saturday and 12 on
+/// Sunday rather than the same everywhere.
+model DayFlavourStock {
+  day       DateTime
+  flavourId String
+  stock     Int
+
+  @@id([day, flavourId])
+  @@index([day])
+}
+
+/// A date you removed. The weekly schedule checks this before generating, so
+/// a deleted date stays deleted instead of reappearing on the next load.
+model SuppressedDate {
+  day       DateTime @id
+  createdAt DateTime @default(now())
+}
+
+model Counter {
+  id    Int @id @default(1)
+  value Int @default(0)
+}

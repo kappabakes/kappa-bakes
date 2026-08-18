@@ -1,0 +1,16 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/sweep-checkouts",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/low-stock",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/collection-reminder",
+      "schedule": "0 8 * * *"
+    }
+  ]
+}
