@@ -18,6 +18,16 @@ enum OrderStatus {
 /// The menu. Managed entirely from /admin — nothing here lives in code.
 /// Sauces and toppings you can offer on top of a flavour. Priced individually
 /// and managed in the admin, so a new sauce needs no deploy.
+/// CHOICE  — the customer picks on the slice or in a tub
+/// ON_SLICE — always on the slice, no choice offered
+/// IN_TUB   — always in a tub, no choice offered. For a sauce that needs
+///            warming, or anything that doesn't work poured on.
+enum ServingMode {
+  CHOICE
+  ON_SLICE
+  IN_TUB
+}
+
 enum ExtraKind {
   SAUCE
   TOPPING
@@ -28,6 +38,10 @@ model Extra {
   kind       ExtraKind
   name       String
   pricePence Int
+  /// Whether this one can go in a tub. A drizzle can't sensibly be tubbed;
+  /// a proper sauce can. Off means it's always on the slice, whatever the
+  /// flavour allows.
+  canTub     Boolean   @default(true)
   active     Boolean   @default(true)
   sortOrder  Int       @default(0)
 
@@ -51,16 +65,21 @@ model Flavour {
   /// Most of this flavour one person can order — for a limited special.
   /// Null means no limit of its own; the day's limit still applies.
   maxPerOrder Int?
-  /// Whether toppings and sauces can go in a tub rather than on the slice.
-  /// Off for anything that has to be dressed at the counter — a special
-  /// where a tub doesn't work.
-  allowSeparate Boolean @default(true)
+  /// When true this flavour is only offered on the dates you've given it
+  /// stock for — a special you're making once. It doesn't appear at all on
+  /// other dates, rather than appearing sold out.
+  selectedDatesOnly Boolean @default(false)
+  /// How toppings and sauces are served on this flavour.
+  serving ServingMode @default(CHOICE)
   /// Whether "extra sauce" is offered. Only meaningful on a flavour that
   /// comes with a sauce already.
   hasExtraSauce Boolean @default(true)
   /// Which sauces can be added to this flavour. Empty means the Add Sauce
   /// option doesn't appear — used for specials that come without a sauce.
   sauceIds    String[] @default([])
+  /// How many different sauces one slice can carry. Separate from the list
+  /// above: you might offer three but allow only one.
+  maxSauces   Int      @default(1)
   /// Which toppings can be added. Empty means Add Toppings doesn't appear.
   toppingIds  String[] @default([])
   /// How many different toppings one slice can carry.

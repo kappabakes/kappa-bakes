@@ -101,6 +101,16 @@ export const HORIZON_WEEKS = 1;
  *
  * Declared here, above the wording that quotes them.
  */
+/**
+ * Asked for in both the confirmation and the reminder. Toppings go on fresh
+ * at collection, and a few minutes' warning is the difference between them
+ * sitting properly and sliding off before someone gets home.
+ */
+export const HEADS_UP_NOTE =
+  "When you're 2-3 minutes away, please message us on WhatsApp so we can add " +
+  "your toppings. They go on fresh, and this keeps them from sliding before " +
+  "you get home.";
+
 export const GRACE_MINUTES = 15;
 export const LATE_GRACE_MINUTES = 30;
 

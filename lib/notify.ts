@@ -3,6 +3,7 @@ import {
   money,
   shortDay,
   NO_SHOW_POLICY,
+  HEADS_UP_NOTE,
   GRACE_NOTE,
   whatsappLink,
 } from "./config";
@@ -13,7 +14,9 @@ export type SliceLine = {
   placement?: string | null;
   /// null when they didn't want it; otherwise where the extra pot goes.
   extraSauce?: string | null;
-  addedSauce?: { name: string; pricePence: number } | null;
+  addedSauces?: { name: string; pricePence: number; placement?: string }[] | null;
+  /// Older orders stored a single sauce.
+  addedSauce?: { name: string } | null;
   addedToppings?: { name: string; pricePence: number }[] | null;
 };
 
@@ -31,7 +34,16 @@ export function summarise(slices: SliceLine[]): string[] {
         ? `${s.flavour} — ${s.placement}`
         : s.flavour;
     if (s.extraSauce) key += ` + extra sauce (${s.extraSauce})`;
-    if (s.addedSauce) key += ` + ${s.addedSauce.name}`;
+    const sauceNames = s.addedSauces?.length
+      ? s.addedSauces.map((x) =>
+          x.placement && x.placement !== s.placement
+            ? `${x.name} (${x.placement})`
+            : x.name
+        )
+      : s.addedSauce
+        ? [s.addedSauce.name]
+        : [];
+    if (sauceNames.length) key += ` + ${sauceNames.join(", ")}`;
     if (s.addedToppings?.length)
       key += ` + ${s.addedToppings.map((t) => t.name).join(", ")}`;
     counts.set(key, (counts.get(key) ?? 0) + 1);
@@ -72,10 +84,21 @@ export function buildEmail(p: Payload, updated = false) {
       "",
       "Nothing to pay at the door — just give your order number.",
       "",
+      HEADS_UP_NOTE,
+      "",
       GRACE_NOTE,
       "",
       `Track your order: ${trackLink(p)}`,
       "",
+      // Only when a number is configured — an orphan heading with no link
+      // under it would look broken.
+      ...(whatsappLink()
+        ? [
+            "If you have any questions, please message on WhatsApp by clicking the link below:",
+            whatsappLink()!,
+            "",
+          ]
+        : []),
       // No sign-off: the sender already reads "Kappa Bakes", and a repeated
       // trailing line gets collapsed by Gmail as though it were a signature.
       NO_SHOW_POLICY,
@@ -218,9 +241,12 @@ export async function notifyCustomer(
  */
 export function buildReminderEmail(p: Payload, address: string[]) {
   return {
-    subject: `Collecting today — ${SHOP.name} order ${p.orderNo}`,
+    // The time is in the subject as well: someone reading a notification on
+    // a lock screen shouldn't be able to take "ready to collect" as "ready
+    // now" — which is how one person turned up hours early.
+    subject: `Collecting today, ${p.window} — ${SHOP.name} order ${p.orderNo}`,
     body: [
-      `Hi ${p.firstName}, your ${SHOP.name} order is ready to collect today.`,
+      `Hi ${p.firstName}, your ${SHOP.name} order will be ready to collect today within the collection slot stated below.`,
       "",
       "Collection",
       `${shortDay(p.day)}, ${p.window}`,
@@ -232,6 +258,8 @@ export function buildReminderEmail(p: Payload, address: string[]) {
       "",
       `Order number: ${p.orderNo}`,
       "Nothing to pay at the door — just give your order number.",
+      "",
+      HEADS_UP_NOTE,
       "",
       GRACE_NOTE,
       "",

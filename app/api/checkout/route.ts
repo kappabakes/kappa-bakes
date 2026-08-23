@@ -37,7 +37,7 @@ type Incoming = {
     flavourId: string;
     toppings: string | null;
     extraSauce?: string | null;
-    addedSauceId?: string | null;
+    addedSauceIds?: string[];
     addedToppingIds?: string[];
   }[];
 };

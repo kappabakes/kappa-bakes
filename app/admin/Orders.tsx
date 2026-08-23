@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { money, shortDay, extraSaucePence } from "@/lib/config";
-import { PageHead, readError } from "./ui";
+import { PageHead, readError, adminBase } from "./ui";
 import { ManualOrder } from "./ManualOrder";
 
 const PhoneIcon = () => (
@@ -29,8 +29,9 @@ type Slice = {
   toppings: string | null;
   placement?: string | null;
   extraSauce?: string | null;
-  addedSauce?: { name: string; pricePence: number } | null;
-  addedSauceId?: string | null;
+  addedSauces?: { name: string; pricePence: number; placement?: string }[] | null;
+  addedSauce?: { name: string } | null;
+  addedSauceIds?: string[];
   addedToppings?: { name: string; pricePence: number }[] | null;
   addedToppingIds?: string[];
 };
@@ -74,6 +75,7 @@ type Flavour = {
   /// the customer had.
   sauceIds?: string[];
   toppingIds?: string[];
+  maxSauces?: number;
   maxToppings?: number;
 };
 type Day = {
@@ -115,7 +117,12 @@ function summarise(slices: Slice[]) {
         ? `${s.flavour} — ${s.placement}`
         : s.flavour;
     if (s.extraSauce) key += ` + EXTRA SAUCE (${s.extraSauce})`;
-    if (s.addedSauce) key += ` + SAUCE: ${s.addedSauce.name}`;
+    const sauces = s.addedSauces?.length
+      ? s.addedSauces.map((x) => x.name)
+      : s.addedSauce
+        ? [s.addedSauce.name]
+        : [];
+    if (sauces.length) key += ` + SAUCE: ${sauces.join(", ")}`;
     if (s.addedToppings?.length)
       key += ` + TOPPINGS: ${s.addedToppings.map((t) => t.name).join(", ")}`;
     counts.set(key, (counts.get(key) ?? 0) + 1);
@@ -134,6 +141,10 @@ export function Orders({ flash }: { flash: (m: string) => void }) {
   const [query, setQuery] = useState("");
   /// Tap a flavour in the breakdown to see only the orders containing it.
   const [flavourFilter, setFlavourFilter] = useState<string | null>(null);
+  /// null shows everything. Stacks with the flavour filter and the search.
+  const [statusFilter, setStatusFilter] = useState<Order["status"] | null>(
+    null
+  );
 
   const load = useCallback(async () => {
     const [o, f, d, x] = await Promise.all([
@@ -209,9 +220,13 @@ export function Orders({ flash }: { flash: (m: string) => void }) {
     ? all.filter((o) => o.slices.some((sl) => sl.flavour === flavourFilter))
     : all;
 
+  const byStatus = statusFilter
+    ? byFlavour.filter((o) => o.status === statusFilter)
+    : byFlavour;
+
   const shown = !q
-    ? byFlavour
-    : byFlavour.filter((o) => {
+    ? byStatus
+    : byStatus.filter((o) => {
         const text = [
           o.orderNo,
           o.firstName,
@@ -260,6 +275,7 @@ export function Orders({ flash }: { flash: (m: string) => void }) {
                   setEditing(null);
                   setQuery("");
                   setFlavourFilter(null);
+                  setStatusFilter(null);
                 }}
                 className={[
                   "rounded-card border px-4 py-3 text-left transition-colors",
@@ -415,6 +431,45 @@ export function Orders({ flash }: { flash: (m: string) => void }) {
             </div>
           )}
 
+          {/* Counts come from what the flavour filter leaves, so they always
+              match what tapping one would show. */}
+          <div className="mb-3 flex flex-wrap gap-2">
+            {(
+              [
+                [null, "All"],
+                ["PAID", "To collect"],
+                ["COLLECTED", "Collected"],
+                ["NO_SHOW", "No-show"],
+                ["CANCELLED", "Cancelled"],
+              ] as const
+            ).map(([value, label]) => {
+              const n =
+                value === null
+                  ? byFlavour.length
+                  : byFlavour.filter((o) => o.status === value).length;
+              const on = statusFilter === value;
+
+              // Hide an empty bucket rather than offer a filter that leads
+              // nowhere — except All, which is how you get back.
+              if (n === 0 && value !== null) return null;
+
+              return (
+                <button
+                  key={label}
+                  onClick={() => setStatusFilter(value)}
+                  className={[
+                    "rounded-btn px-3 py-1.5 text-[13px] font-medium transition-colors",
+                    on
+                      ? "bg-navy text-white"
+                      : "bg-cream-beige text-ink2 hover:bg-cream-warm",
+                  ].join(" ")}
+                >
+                  {label} ({n})
+                </button>
+              );
+            })}
+          </div>
+
           {flavourFilter && (
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-card border border-navy bg-navy px-4 py-2.5 text-white">
               <span className="text-[15px]">
@@ -422,7 +477,10 @@ export function Orders({ flash }: { flash: (m: string) => void }) {
                 <strong>{flavourFilter}</strong> in them
               </span>
               <button
-                onClick={() => setFlavourFilter(null)}
+                onClick={() => {
+                  setFlavourFilter(null);
+                  setStatusFilter(null);
+                }}
                 className="rounded-btn bg-white/15 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/25"
               >
                 ✕ Show all orders
@@ -447,7 +505,7 @@ export function Orders({ flash }: { flash: (m: string) => void }) {
             )}
           </div>
 
-          {(query || flavourFilter) && (
+          {(query || flavourFilter || statusFilter) && (
             <p className="mb-3 text-[13px] text-ink2">
               Showing {list.length} of {all.length} order
               {all.length === 1 ? "" : "s"}
@@ -455,7 +513,7 @@ export function Orders({ flash }: { flash: (m: string) => void }) {
           )}
 
           <ul className="divide-y divide-line">
-            {list.length === 0 && (query || flavourFilter) && (
+            {list.length === 0 && (query || flavourFilter || statusFilter) && (
               <li className="py-6 text-center text-sm text-ink2">
                 Nothing matches
                 {flavourFilter && ` for ${flavourFilter}`}
@@ -634,7 +692,7 @@ export function Orders({ flash }: { flash: (m: string) => void }) {
                       {editing === o.id ? "Close" : "Edit"}
                     </button>
                     <button
-                      onClick={() => window.open(`/admin/receipt/${o.id}`, "_blank")}
+                      onClick={() => window.open(`${adminBase()}/receipt/${o.id}`, "_blank")}
                       className="rounded-btn border border-navy bg-paper px-3 py-1.5 text-xs font-semibold text-navy transition-colors hover:bg-cream-beige"
                     >
                       Order record
@@ -794,7 +852,7 @@ function EditOrder({
       flavourId: s.flavourId,
       toppings: s.toppings,
       extraSauce: s.extraSauce ?? null,
-      addedSauceId: s.addedSauceId ?? null,
+      addedSauceIds: s.addedSauceIds ?? [],
       addedToppingIds: s.addedToppingIds ?? [],
     }))
   );
@@ -809,7 +867,7 @@ function EditOrder({
       n +
       (flavours.find((x) => x.id === s.flavourId)?.pricePence ?? 0) +
       (s.extraSauce ? extraSaucePence(s.extraSauce) : 0) +
-      (s.addedSauceId ? priceOf(s.addedSauceId) : 0) +
+      s.addedSauceIds.reduce((m, id) => m + priceOf(id), 0) +
       s.addedToppingIds.reduce((m, id) => m + priceOf(id), 0),
     0
   );
@@ -901,33 +959,54 @@ function EditOrder({
                     <option value="on the slice">Extra sauce — on slice</option>
                   </select>
                 )}
-                {(fl?.sauceIds?.length ?? 0) > 0 && (
-                  <select
-                    value={s.addedSauceId ?? ""}
-                    onChange={(e) =>
-                      setSlices(
-                        slices.map((x, j) =>
-                          j === i
-                            ? { ...x, addedSauceId: e.target.value || null }
-                            : x
-                        )
-                      )
+                {(fl?.sauceIds?.length ?? 0) > 0 &&
+                  Array.from(
+                    {
+                      length: Math.min(
+                        fl?.maxSauces ?? 1,
+                        extras.filter(
+                          (e) =>
+                            e.kind === "SAUCE" && fl?.sauceIds?.includes(e.id)
+                        ).length
+                      ),
+                    },
+                    (_, n) => {
+                      const taken = s.addedSauceIds.filter((_, j) => j !== n);
+                      return (
+                        <select
+                          key={n}
+                          value={s.addedSauceIds[n] ?? ""}
+                          onChange={(e) => {
+                            const next = [...s.addedSauceIds];
+                            if (e.target.value) next[n] = e.target.value;
+                            else next.splice(n, 1);
+                            setSlices(
+                              slices.map((x, j) =>
+                                j === i
+                                  ? { ...x, addedSauceIds: next.filter(Boolean) }
+                                  : x
+                              )
+                            );
+                          }}
+                          className="rounded-btn border border-field bg-paper px-2 py-1.5 text-sm text-ink"
+                        >
+                          <option value="">Sauce {n + 1}</option>
+                          {extras
+                            .filter(
+                              (e) =>
+                                e.kind === "SAUCE" &&
+                                fl?.sauceIds?.includes(e.id) &&
+                                !taken.includes(e.id)
+                            )
+                            .map((e) => (
+                              <option key={e.id} value={e.id}>
+                                {e.name} (+{money(e.pricePence)})
+                              </option>
+                            ))}
+                        </select>
+                      );
                     }
-                    className="rounded-btn border border-field bg-paper px-2 py-1.5 text-sm text-ink"
-                  >
-                    <option value="">No added sauce</option>
-                    {extras
-                      .filter(
-                        (e) =>
-                          e.kind === "SAUCE" && fl?.sauceIds?.includes(e.id)
-                      )
-                      .map((e) => (
-                        <option key={e.id} value={e.id}>
-                          {e.name} (+{money(e.pricePence)})
-                        </option>
-                      ))}
-                  </select>
-                )}
+                  )}
 
                 {(fl?.toppingIds?.length ?? 0) > 0 &&
                   // Never more boxes than toppings available on this flavour.
@@ -999,7 +1078,7 @@ function EditOrder({
                   flavourId: flavours[0].id,
                   toppings: null,
                   extraSauce: null,
-                  addedSauceId: null,
+                  addedSauceIds: [],
                   addedToppingIds: [],
                 },
               ])

@@ -20,7 +20,9 @@ type Slice = {
   toppings: string | null;
   placement?: string | null;
   extraSauce?: string | null;
-  addedSauce?: { name: string; pricePence: number } | null;
+  addedSauces?: { name: string; pricePence: number; placement?: string }[] | null;
+  /// Older orders stored a single sauce.
+  addedSauce?: { name: string } | null;
   addedToppings?: { name: string; pricePence: number }[] | null;
   pricePence: number;
 };
@@ -59,7 +61,7 @@ export default async function Confirmed({
       s.toppings ?? "",
       s.placement ?? "",
       s.extraSauce ?? "",
-      s.addedSauce?.name ?? "",
+      (s.addedSauces ?? []).map((x) => x.name).join(",") || (s.addedSauce?.name ?? ""),
       (s.addedToppings ?? []).map((t) => t.name).join(","),
     ].join("|");
     const row = grouped.get(key) ?? { n: 0, line: s };
@@ -133,9 +135,22 @@ export default async function Confirmed({
                           Extra sauce: {line.extraSauce}
                         </p>
                       )}
-                      {line.addedSauce && (
+                      {(line.addedSauces?.length || line.addedSauce) && (
                         <p className="text-[13px] font-semibold text-gold">
-                          Sauce: {line.addedSauce.name}
+                          {(line.addedSauces?.length ?? 0) > 1
+                            ? "Sauces: "
+                            : "Sauce: "}
+                          {line.addedSauces?.length
+                            ? line.addedSauces
+                                .map((x) =>
+                                  // Only worth spelling out when it differs
+                                  // from where the rest of the slice is going.
+                                  x.placement && x.placement !== line.placement
+                                    ? `${x.name} (${x.placement})`
+                                    : x.name
+                                )
+                                .join(", ")
+                            : line.addedSauce?.name}
                         </p>
                       )}
                       {line.addedToppings && line.addedToppings.length > 0 && (

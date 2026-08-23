@@ -21,7 +21,7 @@ export type SliceChoice = {
   /// Where the extra sauce goes, priced accordingly. A slice whose toppings
   /// are in a tub can only have its extra sauce in a tub too.
   extraSauce?: string | null;
-  addedSauceId?: string | null;
+  addedSauceIds?: string[];
   addedToppingIds?: string[];
 };
 
@@ -38,8 +38,8 @@ export type PricedLine = {
   /// Name and price are copied in, so a later price change can't rewrite
   /// what someone already paid. The ids come along as well, so the admin can
   /// edit an order without the choices being lost.
-  addedSauce: { name: string; pricePence: number } | null;
-  addedSauceId: string | null;
+  addedSauces: { name: string; pricePence: number; placement?: string }[];
+  addedSauceIds: string[];
   addedToppings: { name: string; pricePence: number }[];
   addedToppingIds: string[];
   pricePence: number;
@@ -66,13 +66,21 @@ export async function priceSlices(
     const f = flavours.find((x) => x.id === c.flavourId);
     if (!f) return { lines: [], error: "That flavour is no longer available." };
 
-    // Where everything on this slice goes. A flavour that can't be served
-    // separately is always on the slice, whatever was submitted — the price
-    // and the prep list both depend on this being true.
+    /*
+     * Where everything on this slice goes.
+     *
+     * Decided here, not taken from the browser: the price and the prep list
+     * both depend on it, and a flavour fixed to one way has to stay that way
+     * whatever was submitted.
+     */
     const placement =
-      f.allowSeparate && c.toppings === "separately"
+      f.serving === "IN_TUB"
         ? "in a tub"
-        : "on the slice";
+        : f.serving === "ON_SLICE"
+          ? "on the slice"
+          : c.toppings === "separately"
+            ? "in a tub"
+            : "on the slice";
 
     // Extra sauce can go either way when the toppings are on the slice, but
     // once the toppings are in a tub the sauce has to be too.
@@ -86,13 +94,29 @@ export async function priceSlices(
             : "on the slice";
     }
 
-    let sauce: PricedLine["addedSauce"] = null;
-    if (c.addedSauceId) {
-      if (!f.sauceIds.includes(c.addedSauceId))
+    const wantedSauces = c.addedSauceIds ?? [];
+    if (wantedSauces.length > f.maxSauces)
+      return {
+        lines: [],
+        error: `${f.name} takes up to ${f.maxSauces} sauce${f.maxSauces === 1 ? "" : "s"}.`,
+      };
+    if (new Set(wantedSauces).size !== wantedSauces.length)
+      return { lines: [], error: "Each sauce can only be chosen once." };
+
+    const addedSauces: PricedLine["addedSauces"] = [];
+    for (const id of wantedSauces) {
+      if (!f.sauceIds.includes(id))
         return { lines: [], error: `That sauce isn't available on ${f.name}.` };
-      const e = byId.get(c.addedSauceId);
+      const e = byId.get(id);
       if (!e) return { lines: [], error: "That sauce is no longer available." };
-      sauce = { name: e.name, pricePence: e.pricePence };
+      addedSauces.push({
+        name: e.name,
+        pricePence: e.pricePence,
+        // A drizzle that can't be tubbed goes on the slice even when the rest
+        // of the order is in a tub — so the record says what actually
+        // happens rather than what was asked for.
+        placement: e.canTub ? placement : "on the slice",
+      });
     }
 
     const wanted = c.addedToppingIds ?? [];
@@ -117,7 +141,7 @@ export async function priceSlices(
     const pricePence =
       f.pricePence +
       (extraSauce ? extraSaucePence(extraSauce) : 0) +
-      (sauce?.pricePence ?? 0) +
+      addedSauces.reduce((n, x) => n + x.pricePence, 0) +
       addedToppings.reduce((n, t) => n + t.pricePence, 0);
 
     lines.push({
@@ -130,10 +154,12 @@ export async function priceSlices(
         : null,
       // Only worth stating when there's something to place.
       placement:
-        f.hasToppings || sauce || addedToppings.length > 0 ? placement : null,
+        f.hasToppings || addedSauces.length > 0 || addedToppings.length > 0
+        ? placement
+        : null,
       extraSauce,
-      addedSauce: sauce,
-      addedSauceId: c.addedSauceId ?? null,
+      addedSauces,
+      addedSauceIds: wantedSauces,
       addedToppings,
       addedToppingIds: wanted,
       pricePence,
@@ -149,14 +175,17 @@ export function describeSlice(l: {
   toppings?: string | null;
   placement?: string | null;
   extraSauce?: string | null;
-  addedSauce?: { name: string } | null;
+  addedSauces?: { name: string }[] | null;
   addedToppings?: { name: string }[] | null;
 }): string[] {
   const bits: string[] = [];
   if (l.toppings) bits.push(`Toppings ${l.toppings}`);
   else if (l.placement) bits.push(`Served ${l.placement}`);
   if (l.extraSauce) bits.push(`Extra sauce ${l.extraSauce}`);
-  if (l.addedSauce) bits.push(`Sauce: ${l.addedSauce.name}`);
+  if (l.addedSauces?.length)
+    bits.push(
+      `${l.addedSauces.length === 1 ? "Sauce" : "Sauces"}: ${l.addedSauces.map((x) => x.name).join(", ")}`
+    );
   if (l.addedToppings?.length)
     bits.push(`Toppings: ${l.addedToppings.map((t) => t.name).join(", ")}`);
   return bits;

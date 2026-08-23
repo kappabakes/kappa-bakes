@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Btn, Card, PageHead, Field, readError } from "./ui";
+import { Btn, Card, PageHead, Field, readError, adminBase } from "./ui";
 
 type Day = {
   iso: string;
@@ -23,6 +23,7 @@ type Slice = {
   toppings: string | null;
   placement?: string | null;
   extraSauce?: string | null;
+  addedSauces?: { name: string; placement?: string }[] | null;
   addedSauce?: { name: string } | null;
   addedToppings?: { name: string }[] | null;
 };
@@ -51,7 +52,12 @@ function summarise(slices: Slice[]) {
         ? `${s.flavour} — ${s.placement}`
         : s.flavour;
     if (s.extraSauce) key += ` + EXTRA SAUCE (${s.extraSauce})`;
-    if (s.addedSauce) key += ` + SAUCE: ${s.addedSauce.name}`;
+    const sauces = s.addedSauces?.length
+      ? s.addedSauces.map((x) => x.name)
+      : s.addedSauce
+        ? [s.addedSauce.name]
+        : [];
+    if (sauces.length) key += ` + SAUCE: ${sauces.join(", ")}`;
     if (s.addedToppings?.length)
       key += ` + TOPPINGS: ${s.addedToppings.map((t) => t.name).join(", ")}`;
     counts.set(key, (counts.get(key) ?? 0) + 1);
@@ -250,7 +256,7 @@ export function Archive({ flash }: { flash: (m: string) => void }) {
                     £{(o.totalPence / 100).toFixed(2)}
                   </span>
                   <button
-                    onClick={() => window.open(`/admin/receipt/${o.id}`, "_blank")}
+                    onClick={() => window.open(`${adminBase()}/receipt/${o.id}`, "_blank")}
                     className="rounded-btn border border-navy px-3 py-1 text-[12px] font-semibold text-navy"
                   >
                     Record
@@ -350,7 +356,7 @@ export function Archive({ flash }: { flash: (m: string) => void }) {
                     <span>{o.email}</span>
                     <button
                       onClick={() =>
-                        window.open(`/admin/receipt/${o.id}`, "_blank")
+                        window.open(`${adminBase()}/receipt/${o.id}`, "_blank")
                       }
                       className="text-gold-hover underline underline-offset-4"
                     >

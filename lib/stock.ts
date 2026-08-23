@@ -306,7 +306,10 @@ export async function flavourStock(day: Date) {
     }
   }
 
-  const out: Record<string, { sold: number; stock: number | null; left: number | null }> = {};
+  const out: Record<
+    string,
+    { sold: number; stock: number | null; left: number | null; offered: boolean }
+  > = {};
   for (const f of flavours) {
     const used = sold.get(f.id) ?? 0;
     const stock = perDay.has(f.id) ? perDay.get(f.id)! : f.stockPerDay;
@@ -314,6 +317,9 @@ export async function flavourStock(day: Date) {
       sold: used,
       stock,
       left: stock === null || stock === undefined ? null : Math.max(0, stock - used),
+      // A one-off special isn't offered on a date you haven't given it stock
+      // for. Not sold out — simply not on the menu that day.
+      offered: f.selectedDatesOnly ? perDay.has(f.id) : true,
     };
   }
   return out;

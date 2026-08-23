@@ -23,7 +23,7 @@ type Flavour = {
   description: string;
   pricePence: number;
   hasToppings: boolean;
-  allowSeparate: boolean;
+  serving: "CHOICE" | "ON_SLICE" | "IN_TUB";
   hasExtraSauce: boolean;
   allergens: string[];
   image: string | null;
@@ -36,13 +36,17 @@ type Flavour = {
   sauceIds: string[];
   /// Which toppings can be added, and how many at once.
   toppingIds: string[];
+  maxSauces: number;
   maxToppings: number;
 };
 
 /** How many of each flavour are left, for the chosen date. */
 type Stock = Record<
   string,
-  Record<string, { sold: number; stock: number | null; left: number | null }>
+  Record<
+    string,
+    { sold: number; stock: number | null; left: number | null; offered: boolean }
+  >
 >;
 type Day = {
   id: string;
@@ -73,7 +77,7 @@ type Extra = {
  * One entry per slice.
  *   separate   the flavour's own toppings go in a tub rather than on
  *   extra      more of the sauce it comes with — priced by placement
- *   sauceId    a sauce chosen for a flavour that comes without one
+ *   sauceIds   sauces chosen for this slice, up to the flavour's limit
  *   toppingIds toppings chosen from the list allowed for that flavour
  *
  * Added sauce and toppings follow `separate`, so it's only asked once.
@@ -85,7 +89,7 @@ type Slice = {
   /// null for none, otherwise where the extra sauce goes. A slice whose
   /// toppings are in a tub can only have the extra in a tub too.
   extra: string | null;
-  sauceId: string | null;
+  sauceIds: string[];
   toppingIds: string[];
 };
 type Picks = Record<string, Slice[]>;
@@ -225,7 +229,7 @@ function OrderPageInner() {
     return (
       base +
       (s.extra ? extraSaucePence(s.extra) : 0) +
-      (s.sauceId ? priceOf(s.sauceId) : 0) +
+      s.sauceIds.reduce((n, id) => n + priceOf(id), 0) +
       s.toppingIds.reduce((n, id) => n + priceOf(id), 0)
     );
   };
@@ -264,7 +268,7 @@ function OrderPageInner() {
       ...picks,
       [f.id]: [
         ...(picks[f.id] ?? []),
-        { separate: false, extra: null, sauceId: null, toppingIds: [] },
+        { separate: false, extra: null, sauceIds: [], toppingIds: [] },
       ],
     });
     setError(null);
@@ -287,15 +291,22 @@ function OrderPageInner() {
   async function pay() {
     setBusy(true);
     setError(null);
-    const slices = Object.entries(picks).flatMap(([flavourId, arr]) =>
-      arr.map((s) => ({
+    const slices = Object.entries(picks).flatMap(([flavourId, arr]) => {
+      const flavour = flavours.find((x) => x.id === flavourId);
+      return arr.map((s) => ({
         flavourId,
-        toppings: s.separate ? "separately" : "on the slice",
+        // The server decides this too, so it can't be spoofed — but sending
+        // the right thing keeps the two in agreement.
+        toppings:
+          flavour?.serving === "IN_TUB" ||
+          (flavour?.serving === "CHOICE" && s.separate)
+            ? "separately"
+            : "on the slice",
         extraSauce: s.extra,
-        addedSauceId: s.sauceId,
+        addedSauceIds: s.sauceIds,
         addedToppingIds: s.toppingIds,
-      }))
-    );
+      }));
+    });
     // Everything below is wrapped: a server error returns an HTML page, and
     // reading that as JSON throws. Unhandled, that left the button saying
     // "Working…" for ever with no explanation.
@@ -512,7 +523,15 @@ function OrderPageInner() {
               </p>
 
               <ul className="space-y-3">
-                {flavours.map((f) => {
+                {flavours
+                .filter((f) => {
+                  // A one-off special simply isn't on the menu for a date it
+                  // wasn't made for.
+                  if (!dayIso) return true;
+                  const row = stock[dayIso]?.[f.id];
+                  return row ? row.offered : true;
+                })
+                .map((f) => {
                   const chosen = picks[f.id] ?? [];
                   const left = leftOf(f.id);
                   const soldOut = left !== null && left <= 0;
@@ -610,9 +629,16 @@ function OrderPageInner() {
                         chosen.length > 0 && (
                           <div className="space-y-3 border-t border-line bg-paper p-3">
                             {chosen.map((slice, i) => {
-                              const where = slice.separate
-                                ? "in a tub"
-                                : "on the slice";
+                              // What this slice actually gets, given the
+                              // flavour's own rule.
+                              const where =
+                                f.serving === "IN_TUB"
+                                  ? "in a tub"
+                                  : f.serving === "ON_SLICE"
+                                    ? "on the slice"
+                                    : slice.separate
+                                      ? "in a tub"
+                                      : "on the slice";
                               const sauces = extras.filter(
                                 (e) =>
                                   e.kind === "SAUCE" &&
@@ -637,11 +663,10 @@ function OrderPageInner() {
                                     {/* Shown when there's something to place:
                                         the flavour's own toppings, or a sauce
                                         or topping the customer has added. */}
-                                    {/* No choice to make when everything has
-                                        to go on the slice. */}
-                                    {f.allowSeparate &&
+                                    {/* Only when there's a choice to make. */}
+                                    {f.serving === "CHOICE" &&
                                       (f.hasToppings ||
-                                        slice.sauceId ||
+                                        slice.sauceIds.length > 0 ||
                                         slice.toppingIds.length > 0) && (
                                       <div className="grid grow grid-cols-2 gap-2">
                                         <ToppingChoice
@@ -676,12 +701,14 @@ function OrderPageInner() {
                                       </div>
                                       )}
 
-                                    {!f.allowSeparate &&
+                                    {f.serving !== "CHOICE" &&
                                       (f.hasToppings ||
-                                        slice.sauceId ||
+                                        slice.sauceIds.length > 0 ||
                                         slice.toppingIds.length > 0) && (
                                         <span className="text-[12px] text-ink2">
-                                          Served on the slice
+                                          {f.serving === "IN_TUB"
+                                            ? "Served in a tub on the side"
+                                            : "Served on the slice"}
                                         </span>
                                       )}
                                   </div>
@@ -698,9 +725,7 @@ function OrderPageInner() {
                                               // In a tub is the only option
                                               // once the toppings are.
                                               extra: e.target.checked
-                                                ? slice.separate && f.allowSeparate
-                                                  ? "in a tub"
-                                                  : "on the slice"
+                                                ? where
                                                 : null,
                                             })
                                           }
@@ -710,21 +735,17 @@ function OrderPageInner() {
                                       </label>
 
                                       {slice.extra &&
-                                        (slice.separate || !f.allowSeparate ? (
+                                        (f.serving !== "CHOICE" ||
+                                        slice.separate ? (
                                           <p className="mt-1.5 rounded-btn border border-gold bg-gold-light px-3 py-2 text-[12px] text-ink">
-                                            {f.allowSeparate
+                                            {f.serving === "CHOICE"
                                               ? "In a tub, since your toppings are separate"
-                                              : "On the slice"}{" "}
+                                              : where === "in a tub"
+                                                ? "In a tub"
+                                                : "On the slice"}{" "}
                                             ·{" "}
                                             <span className="font-semibold">
-                                              +
-                                              {money(
-                                                extraSaucePence(
-                                                  f.allowSeparate
-                                                    ? "in a tub"
-                                                    : "on the slice"
-                                                )
-                                              )}
+                                              +{money(extraSaucePence(where))}
                                             </span>
                                           </p>
                                         ) : (
@@ -754,47 +775,109 @@ function OrderPageInner() {
                                     </div>
                                   )}
 
-                                  {/* a sauce for a flavour that comes without */}
+                                  {/* sauces — same shape as the toppings
+                                      below, since a slice can take more than
+                                      one where the flavour allows it */}
                                   {sauces.length > 0 && (
                                     <div className="mt-2.5">
                                       <label className="flex cursor-pointer items-center gap-2.5 text-[13px] text-ink">
                                         <input
                                           type="checkbox"
-                                          checked={Boolean(slice.sauceId)}
+                                          checked={slice.sauceIds.length > 0}
                                           onChange={(e) =>
                                             setSlice(f.id, i, {
-                                              sauceId: e.target.checked
-                                                ? sauces[0].id
-                                                : null,
+                                              sauceIds: e.target.checked
+                                                ? [sauces[0].id]
+                                                : [],
                                             })
                                           }
                                           className="h-4 w-4 accent-gold"
                                         />
                                         Add sauce
+                                        {Math.min(f.maxSauces, sauces.length) >
+                                          1 && (
+                                          <span className="text-[11px] text-ink2">
+                                            up to{" "}
+                                            {Math.min(
+                                              f.maxSauces,
+                                              sauces.length
+                                            )}
+                                          </span>
+                                        )}
                                       </label>
 
-                                      {slice.sauceId && (
-                                        <select
-                                          value={slice.sauceId}
-                                          onChange={(e) =>
-                                            setSlice(f.id, i, {
-                                              sauceId: e.target.value,
-                                            })
-                                          }
-                                          className="mt-1.5 w-full rounded-btn border border-field bg-paper px-3 py-2 text-[14px] text-ink focus:border-gold focus:outline-none"
+                                      {slice.sauceIds.length > 0 && (
+                                        <div
+                                          className={[
+                                            "mt-1.5 grid gap-2",
+                                            Math.min(
+                                              f.maxSauces,
+                                              sauces.length
+                                            ) > 1
+                                              ? "grid-cols-2"
+                                              : "grid-cols-1",
+                                          ].join(" ")}
                                         >
-                                          {sauces.map((e) => (
-                                            <option key={e.id} value={e.id}>
-                                              {e.name} +{money(e.pricePence)}
-                                            </option>
-                                          ))}
-                                        </select>
+                                          {/* Never more boxes than there are
+                                              sauces to put in them. */}
+                                          {Array.from(
+                                            {
+                                              length: Math.min(
+                                                f.maxSauces,
+                                                sauces.length
+                                              ),
+                                            },
+                                            (_, n) => {
+                                              const taken =
+                                                slice.sauceIds.filter(
+                                                  (_, j) => j !== n
+                                                );
+                                              return (
+                                                <select
+                                                  key={n}
+                                                  value={slice.sauceIds[n] ?? ""}
+                                                  onChange={(e) => {
+                                                    const next = [
+                                                      ...slice.sauceIds,
+                                                    ];
+                                                    if (e.target.value)
+                                                      next[n] = e.target.value;
+                                                    else next.splice(n, 1);
+                                                    setSlice(f.id, i, {
+                                                      sauceIds:
+                                                        next.filter(Boolean),
+                                                    });
+                                                  }}
+                                                  className="w-full rounded-btn border border-field bg-paper px-2 py-2 text-[13px] text-ink focus:border-gold focus:outline-none"
+                                                >
+                                                  <option value="">
+                                                    Sauce {n + 1}
+                                                  </option>
+                                                  {sauces
+                                                    .filter(
+                                                      (e) =>
+                                                        !taken.includes(e.id)
+                                                    )
+                                                    .map((e) => (
+                                                      <option
+                                                        key={e.id}
+                                                        value={e.id}
+                                                      >
+                                                        {e.name} +
+                                                        {money(e.pricePence)}
+                                                      </option>
+                                                    ))}
+                                                </select>
+                                              );
+                                            }
+                                          )}
+                                        </div>
                                       )}
 
-                                      {slice.sauceId && (
+                                      {slice.sauceIds.length > 0 && (
                                         <p className="mt-1 text-[11px] text-ink2">
                                           Going {where}
-                                          {f.allowSeparate && " — set that above"}.
+                                          {f.serving === "CHOICE" && " — set that above"}.
                                         </p>
                                       )}
                                     </div>
@@ -890,7 +973,7 @@ function OrderPageInner() {
                                       {slice.toppingIds.length > 0 && (
                                         <p className="mt-1 text-[11px] text-ink2">
                                           Going {where}
-                                          {f.allowSeparate && " — set that above"}.
+                                          {f.serving === "CHOICE" && " — set that above"}.
                                         </p>
                                       )}
                                     </div>
@@ -1007,7 +1090,7 @@ function OrderPageInner() {
                     const f = flavours.find((x) => x.id === id)!;
                     const sep = arr.filter((x) => x.separate).length;
                     const withExtra = arr.filter((x) => x.extra).length;
-                    const withSauce = arr.filter((x) => x.sauceId).length;
+                    const withSauce = arr.filter((x) => x.sauceIds.length > 0).length;
                     const withTops = arr.filter(
                       (x) => x.toppingIds.length > 0
                     ).length;
@@ -1016,7 +1099,7 @@ function OrderPageInner() {
                       <li key={id} className="flex justify-between gap-3">
                         <span>
                           {arr.length} × {f.name}
-                          {f.hasToppings && f.allowSeparate && (
+                          {f.hasToppings && f.serving === "CHOICE" && (
                             <span className="block text-[12px] text-gold">
                               {sep === 0
                                 ? "All on collection"
@@ -1033,11 +1116,8 @@ function OrderPageInner() {
                           {withSauce > 0 && (
                             <span className="block text-[12px] text-gold">
                               {arr
-                                .filter((x) => x.sauceId)
-                                .map(
-                                  (x) =>
-                                    extras.find((e) => e.id === x.sauceId)?.name
-                                )
+                                .flatMap((x) => x.sauceIds)
+                                .map((id) => extras.find((e) => e.id === id)?.name)
                                 .join(", ")}
                             </span>
                           )}

@@ -10,6 +10,7 @@ type Extra = {
   name: string;
   pricePence: number;
   active: boolean;
+  canTub: boolean;
   sortOrder: number;
 };
 
@@ -77,7 +78,9 @@ function Group({
   const [price, setPrice] = useState("1.00");
   const mine = extras.filter((e) => e.kind === kind);
 
-  async function save(body: Partial<Extra> & { name: string; pricePence: number }) {
+  async function save(
+    body: Partial<Extra> & { name: string; pricePence: number }
+  ) {
     const r = await fetch("/api/admin/extras", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -132,6 +135,26 @@ function Group({
                 })
               }
             />
+            {kind === "SAUCE" && (
+              <label className="flex items-center gap-2 text-[13px] text-ink2">
+                <input
+                  type="checkbox"
+                  checked={e.canTub}
+                  onChange={(ev) =>
+                    save({
+                      id: e.id,
+                      name: e.name,
+                      pricePence: e.pricePence,
+                      active: e.active,
+                      canTub: ev.target.checked,
+                    })
+                  }
+                  className="h-4 w-4 accent-gold"
+                />
+                Can go in a tub
+              </label>
+            )}
+
             <label className="flex items-center gap-2 text-[13px] text-ink2">
               <input
                 type="checkbox"
@@ -142,6 +165,7 @@ function Group({
                     name: e.name,
                     pricePence: e.pricePence,
                     active: ev.target.checked,
+                    canTub: e.canTub,
                   })
                 }
                 className="h-4 w-4 accent-gold"

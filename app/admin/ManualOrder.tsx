@@ -8,11 +8,12 @@ type Flavour = {
   id: string;
   name: string;
   hasToppings: boolean;
-  allowSeparate: boolean;
+  serving: "CHOICE" | "ON_SLICE" | "IN_TUB";
   pricePence: number;
   active: boolean;
   sauceIds: string[];
   toppingIds: string[];
+  maxSauces: number;
   maxToppings: number;
 };
 
@@ -28,7 +29,7 @@ type Line = {
   flavourId: string;
   toppings: string | null;
   extraSauce: string | null;
-  addedSauceId: string | null;
+  addedSauceIds: string[];
   addedToppingIds: string[];
 };
 
@@ -97,7 +98,7 @@ export function ManualOrder({
       n +
       (flavours.find((x) => x.id === l.flavourId)?.pricePence ?? 0) +
       (l.extraSauce ? extraSaucePence(l.extraSauce) : 0) +
-      (l.addedSauceId ? priceOf(l.addedSauceId) : 0) +
+      l.addedSauceIds.reduce((m, id) => m + priceOf(id), 0) +
       l.addedToppingIds.reduce((m, id) => m + priceOf(id), 0),
     0
   );
@@ -213,7 +214,7 @@ export function ManualOrder({
                                 : null,
                               // Extras are per flavour, so a change clears
                               // anything the new one doesn't offer.
-                              addedSauceId: null,
+                              addedSauceIds: [],
                               addedToppingIds: [],
                             }
                           : x
@@ -229,7 +230,13 @@ export function ManualOrder({
                   ))}
                 </select>
 
-                {fl?.hasToppings && fl.allowSeparate && (
+                {fl && fl.hasToppings && fl.serving !== "CHOICE" && (
+                  <span className="text-xs text-ink2">
+                    {fl.serving === "IN_TUB" ? "In a tub" : "On the slice"}
+                  </span>
+                )}
+
+                {fl?.hasToppings && fl.serving === "CHOICE" && (
                   <select
                     value={l.toppings ?? "on the slice"}
                     onChange={(e) =>
@@ -270,32 +277,56 @@ export function ManualOrder({
                   </select>
                 )}
 
-                {fl && fl.sauceIds.length > 0 && (
-                  <select
-                    value={l.addedSauceId ?? ""}
-                    onChange={(e) =>
-                      setLines(
-                        lines.map((x, j) =>
-                          j === i
-                            ? { ...x, addedSauceId: e.target.value || null }
-                            : x
-                        )
-                      )
+                {fl &&
+                  fl.sauceIds.length > 0 &&
+                  // Never more boxes than sauces available on this flavour.
+                  Array.from(
+                    {
+                      length: Math.min(
+                        fl.maxSauces,
+                        extras.filter(
+                          (e) =>
+                            e.kind === "SAUCE" && fl.sauceIds.includes(e.id)
+                        ).length
+                      ),
+                    },
+                    (_, n) => {
+                      const taken = l.addedSauceIds.filter((_, j) => j !== n);
+                      return (
+                        <select
+                          key={n}
+                          value={l.addedSauceIds[n] ?? ""}
+                          onChange={(e) => {
+                            const next = [...l.addedSauceIds];
+                            if (e.target.value) next[n] = e.target.value;
+                            else next.splice(n, 1);
+                            setLines(
+                              lines.map((x, j) =>
+                                j === i
+                                  ? { ...x, addedSauceIds: next.filter(Boolean) }
+                                  : x
+                              )
+                            );
+                          }}
+                          className="rounded-btn border border-field bg-paper px-3 py-2 text-sm text-ink"
+                        >
+                          <option value="">Sauce {n + 1}</option>
+                          {extras
+                            .filter(
+                              (e) =>
+                                e.kind === "SAUCE" &&
+                                fl.sauceIds.includes(e.id) &&
+                                !taken.includes(e.id)
+                            )
+                            .map((e) => (
+                              <option key={e.id} value={e.id}>
+                                {e.name} (+{money(e.pricePence)})
+                              </option>
+                            ))}
+                        </select>
+                      );
                     }
-                    className="rounded-btn border border-field bg-paper px-3 py-2 text-sm text-ink"
-                  >
-                    <option value="">No added sauce</option>
-                    {extras
-                      .filter(
-                        (e) => e.kind === "SAUCE" && fl.sauceIds.includes(e.id)
-                      )
-                      .map((e) => (
-                        <option key={e.id} value={e.id}>
-                          {e.name} (+{money(e.pricePence)})
-                        </option>
-                      ))}
-                  </select>
-                )}
+                  )}
 
                 {fl &&
                   fl.toppingIds.length > 0 &&
@@ -368,7 +399,7 @@ export function ManualOrder({
                   flavourId: flavours[0].id,
                   toppings: flavours[0].hasToppings ? "on the slice" : null,
                   extraSauce: null,
-                  addedSauceId: null,
+                  addedSauceIds: [],
                   addedToppingIds: [],
                 },
               ])

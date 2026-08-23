@@ -17,10 +17,13 @@ type Flavour = {
   nameImage: string | null;
   maxPerOrder: number | null;
   stockPerDay: number | null;
-  allowSeparate: boolean;
+  serving: "CHOICE" | "ON_SLICE" | "IN_TUB";
+  selectedDatesOnly: boolean;
+  dateStock?: { iso: string; stock: number }[];
   hasExtraSauce: boolean;
   sauceIds: string[];
   toppingIds: string[];
+  maxSauces: number;
   maxToppings: number;
   active: boolean;
   sortOrder: number;
@@ -33,7 +36,9 @@ const placeholder = {
   description: "A line about what's in it — this shows on the menu.",
   price: "6.50",
   hasToppings: true,
-  allowSeparate: true,
+  serving: "CHOICE" as "CHOICE" | "ON_SLICE" | "IN_TUB",
+  selectedDatesOnly: false,
+  dateStock: [] as { iso: string; stock: number }[],
   hasExtraSauce: true,
   allergens: ["milk", "eggs", "gluten"] as string[],
   image: "",
@@ -42,12 +47,16 @@ const placeholder = {
   stockPerDay: "",
   sauceIds: [] as string[],
   toppingIds: [] as string[],
+  maxSauces: 1,
   maxToppings: 2,
   sortOrder: 0,
 };
 
 export function MenuManager({ flash }: { flash: (m: string) => void }) {
   const [flavours, setFlavours] = useState<Flavour[] | null>(null);
+  const [days, setDays] = useState<
+    { iso: string; label: string; capacity: number }[]
+  >([]);
   const [editing, setEditing] = useState<string | "new" | null>(null);
   const [draft, setDraft] = useState({ ...placeholder });
   const [uploading, setUploading] = useState(false);
@@ -65,7 +74,11 @@ export function MenuManager({ flash }: { flash: (m: string) => void }) {
       fetch("/api/allergens"),
       fetch("/api/admin/extras"),
     ]);
-    if (r.ok) setFlavours((await r.json()).flavours);
+    if (r.ok) {
+      const d = await r.json();
+      setFlavours(d.flavours);
+      setDays(d.days ?? []);
+    }
     else {
       setFlavours([]);
       flash(await readError(r));
@@ -122,10 +135,13 @@ export function MenuManager({ flash }: { flash: (m: string) => void }) {
       nameImage: f.nameImage ?? "",
       maxPerOrder: f.maxPerOrder ? String(f.maxPerOrder) : "",
       stockPerDay: f.stockPerDay ? String(f.stockPerDay) : "",
-      allowSeparate: f.allowSeparate ?? true,
+      serving: f.serving ?? "CHOICE",
+      selectedDatesOnly: f.selectedDatesOnly ?? false,
+      dateStock: f.dateStock ?? [],
       hasExtraSauce: f.hasExtraSauce ?? true,
       sauceIds: f.sauceIds ?? [],
       toppingIds: f.toppingIds ?? [],
+      maxSauces: f.maxSauces ?? 1,
       maxToppings: f.maxToppings ?? 2,
       sortOrder: f.sortOrder,
     });
@@ -162,10 +178,13 @@ export function MenuManager({ flash }: { flash: (m: string) => void }) {
         nameImage: draft.nameImage,
         maxPerOrder: draft.maxPerOrder ? Number(draft.maxPerOrder) : null,
         stockPerDay: draft.stockPerDay ? Number(draft.stockPerDay) : null,
-        allowSeparate: draft.allowSeparate,
+        serving: draft.serving,
+        selectedDatesOnly: draft.selectedDatesOnly,
+        dateStock: draft.selectedDatesOnly ? draft.dateStock : [],
         hasExtraSauce: draft.hasExtraSauce,
         sauceIds: draft.sauceIds,
         toppingIds: draft.toppingIds,
+        maxSauces: Number(draft.maxSauces) || 1,
         maxToppings: Number(draft.maxToppings) || 2,
         sortOrder: Number(draft.sortOrder) || 0,
         active: true,
@@ -429,25 +448,162 @@ export function MenuManager({ flash }: { flash: (m: string) => void }) {
                 </span>
               </label>
 
-              <label className="flex items-start gap-3 text-[15px] text-ink">
-                <input
-                  type="checkbox"
-                  checked={draft.allowSeparate}
-                  onChange={(e) =>
-                    setDraft({ ...draft, allowSeparate: e.target.checked })
-                  }
-                  className="mt-1 h-4 w-4 accent-gold"
-                />
-                <span>
-                  Allow toppings and sauce in a tub
-                  <span className="block text-[12px] text-ink2">
-                    Untick and everything goes on the slice, with no choice
-                    offered. For anything that doesn&apos;t work in a tub.
+              {/* A one-off special: on the menu only for the dates you pick. */}
+              <div className="border-t border-line pt-4">
+                <label className="flex items-start gap-3 text-[15px] text-ink">
+                  <input
+                    type="checkbox"
+                    checked={draft.selectedDatesOnly}
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        selectedDatesOnly: e.target.checked,
+                      })
+                    }
+                    className="mt-1 h-4 w-4 accent-gold"
+                  />
+                  <span>
+                    Only on selected dates
+                    <span className="block text-[12px] text-ink2">
+                      For a special you&apos;re making once. It won&apos;t
+                      appear at all on other dates — not sold out, just not on
+                      the menu.
+                    </span>
                   </span>
-                </span>
-              </label>
+                </label>
 
-              {draft.hasToppings && draft.allowSeparate && (
+                {draft.selectedDatesOnly && (
+                  <div className="mt-3">
+                    {days.length === 0 ? (
+                      <p className="text-[13px] text-ink2">
+                        No upcoming collection dates. Set some up first, then
+                        come back.
+                      </p>
+                    ) : (
+                      <ul className="space-y-2">
+                        {days.map((d) => {
+                          const row = draft.dateStock.find(
+                            (x) => x.iso === d.iso
+                          );
+                          return (
+                            <li
+                              key={d.iso}
+                              className="flex flex-wrap items-center gap-3"
+                            >
+                              <label className="flex min-w-[10rem] grow cursor-pointer items-center gap-2.5 text-[14px] text-ink">
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(row)}
+                                  onChange={(e) =>
+                                    setDraft({
+                                      ...draft,
+                                      dateStock: e.target.checked
+                                        ? [
+                                            ...draft.dateStock,
+                                            { iso: d.iso, stock: 8 },
+                                          ]
+                                        : draft.dateStock.filter(
+                                            (x) => x.iso !== d.iso
+                                          ),
+                                    })
+                                  }
+                                  className="h-4 w-4 accent-gold"
+                                />
+                                {d.label}
+                              </label>
+
+                              {row && (
+                                <span className="flex items-center gap-2">
+                                  <input
+                                    inputMode="numeric"
+                                    value={String(row.stock)}
+                                    onChange={(e) =>
+                                      setDraft({
+                                        ...draft,
+                                        dateStock: draft.dateStock.map((x) =>
+                                          x.iso === d.iso
+                                            ? {
+                                                ...x,
+                                                stock:
+                                                  Number(
+                                                    e.target.value.replace(
+                                                      /\D/g,
+                                                      ""
+                                                    )
+                                                  ) || 0,
+                                              }
+                                            : x
+                                        ),
+                                      })
+                                    }
+                                    className="w-20 rounded-btn border border-field bg-paper px-3 py-1.5 text-[15px] text-ink focus:border-gold focus:outline-none"
+                                  />
+                                  <span className="text-[12px] text-ink2">
+                                    slices
+                                  </span>
+                                </span>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+
+                    <p className="mt-2 text-[12px] text-muted">
+                      These slices are separate from the day&apos;s total, so
+                      they don&apos;t eat into your other flavours.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <p className="text-[15px] text-ink">
+                  How toppings and sauce are served
+                </p>
+                <div className="mt-2 space-y-2">
+                  {(
+                    [
+                      [
+                        "CHOICE",
+                        "Customer chooses",
+                        "On the slice or in a tub, their call.",
+                      ],
+                      [
+                        "ON_SLICE",
+                        "On the slice only",
+                        "No choice offered. For anything that doesn't work in a tub.",
+                      ],
+                      [
+                        "IN_TUB",
+                        "In a tub only",
+                        "No choice offered. For a sauce that needs warming, or won't pour.",
+                      ],
+                    ] as const
+                  ).map(([value, title, note]) => (
+                    <label
+                      key={value}
+                      className="flex cursor-pointer items-start gap-3 text-[15px] text-ink"
+                    >
+                      <input
+                        type="radio"
+                        name="serving"
+                        checked={draft.serving === value}
+                        onChange={() => setDraft({ ...draft, serving: value })}
+                        className="mt-1 h-4 w-4 accent-gold"
+                      />
+                      <span>
+                        {title}
+                        <span className="block text-[12px] text-ink2">
+                          {note}
+                        </span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {draft.hasToppings && draft.serving !== "ON_SLICE" && (
                 <label className="flex items-start gap-3 text-[15px] text-ink">
                   <input
                     type="checkbox"
@@ -531,11 +687,24 @@ export function MenuManager({ flash }: { flash: (m: string) => void }) {
               {/* which extras this flavour offers */}
               <ExtraPicker
                 title="Add sauce"
-                note="For a flavour that doesn't come with one. Customers pick a single sauce."
+                note="For a flavour that doesn't come with one, or where a second sauce works."
                 kind="SAUCE"
                 catalogue={catalogue}
                 selected={draft.sauceIds}
                 onChange={(ids) => setDraft({ ...draft, sauceIds: ids })}
+                extra={
+                  <Field
+                    label="How many at once"
+                    value={String(draft.maxSauces)}
+                    onChange={(v) =>
+                      setDraft({
+                        ...draft,
+                        maxSauces: Number(v.replace(/\D/g, "")) || 1,
+                      })
+                    }
+                    className="mt-3 w-36"
+                  />
+                }
               />
 
               <ExtraPicker
@@ -641,9 +810,19 @@ export function MenuManager({ flash }: { flash: (m: string) => void }) {
                     {f.description}
                   </p>
 
-                  {f.allowSeparate === false && (
+                  {f.selectedDatesOnly && (
+                    <p className="mt-1 text-[12px] font-semibold text-gold-hover">
+                      Selected dates only
+                      {f.dateStock && f.dateStock.length > 0
+                        ? ` · ${f.dateStock.length} date${f.dateStock.length === 1 ? "" : "s"}`
+                        : " · none set"}
+                    </p>
+                  )}
+                  {f.serving !== "CHOICE" && (
                     <p className="mt-1 text-[12px] font-semibold text-ink2">
-                      On the slice only
+                      {f.serving === "IN_TUB"
+                        ? "In a tub only"
+                        : "On the slice only"}
                     </p>
                   )}
                   {(f.maxPerOrder || f.stockPerDay) && (

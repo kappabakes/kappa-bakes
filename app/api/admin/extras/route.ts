@@ -23,6 +23,7 @@ export async function POST(req: Request) {
     name: string;
     pricePence: number;
     active?: boolean;
+    canTub?: boolean;
     sortOrder?: number;
   };
 
@@ -36,6 +37,7 @@ export async function POST(req: Request) {
     name: b.name.trim(),
     pricePence: Math.round(b.pricePence),
     active: b.active ?? true,
+    canTub: b.canTub ?? true,
     sortOrder: b.sortOrder ?? 0,
   };
 

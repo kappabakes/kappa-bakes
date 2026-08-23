@@ -1,17 +1,35 @@
 import Image from "next/image";
 import { ZoomImage } from "../components/ZoomImage";
 import Link from "next/link";
-import { db } from "@/lib/stock";
+import { db, todayUk } from "@/lib/stock";
 import { money, allergenLabel, ALLERGEN_HEADING, ALLERGEN_BODY } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Menu" };
 
 export default async function Menu() {
-  const flavours = await db.flavour.findMany({
-    where: { active: true },
-    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-  });
+  const [all, upcomingStock] = await Promise.all([
+    db.flavour.findMany({
+      where: { active: true },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    }),
+    // Which specials are on for a date still to come.
+    db.dayFlavourStock.findMany({
+      where: { day: { gte: todayUk() } },
+      select: { flavourId: true },
+    }),
+  ]);
+
+  const onSoon = new Set(upcomingStock.map((d) => d.flavourId));
+
+  /*
+   * A special that isn't on for any upcoming date comes off the menu
+   * entirely. Showing something nobody can order reads as a mistake — better
+   * they never see it than see it and find it unavailable.
+   */
+  const flavours = all.filter(
+    (f) => !f.selectedDatesOnly || onSoon.has(f.id)
+  );
 
   return (
     <main className="bg-cream py-12">

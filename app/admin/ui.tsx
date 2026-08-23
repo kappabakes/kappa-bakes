@@ -203,3 +203,19 @@ export async function readError(r: Response): Promise<string> {
     return `${r.status}: ${text.slice(0, 120)}`;
   }
 }
+
+
+/**
+ * Where the admin is actually being served from.
+ *
+ * With ADMIN_PATH set, the admin lives at a secret address that's rewritten
+ * to /admin behind the scenes — so the browser's URL is the secret one, and
+ * linking to "/admin/receipt/..." hits the 404 the middleware returns for
+ * anyone poking at /admin. Reading the first path segment gives the right
+ * base without the page needing to know the secret.
+ */
+export function adminBase(): string {
+  if (typeof window === "undefined") return "/admin";
+  const first = window.location.pathname.split("/").filter(Boolean)[0];
+  return first ? `/${first}` : "/admin";
+}

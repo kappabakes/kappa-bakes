@@ -1,16 +1,39 @@
 import { NextResponse } from "next/server";
 import { currentAdmin } from "@/lib/auth";
-import { db } from "@/lib/stock";
+import { db, midnightUtc, todayUk } from "@/lib/stock";
+import { dayLabel } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
 const authed = () => Boolean(currentAdmin());
 
 export async function GET(req: Request) {
   if (!authed()) return new NextResponse("Nope", { status: 401 });
-  const flavours = await db.flavour.findMany({
-    orderBy: [{ active: "desc" }, { sortOrder: "asc" }, { name: "asc" }],
+  const [flavours, dayStock, days] = await Promise.all([
+    db.flavour.findMany({
+      orderBy: [{ active: "desc" }, { sortOrder: "asc" }, { name: "asc" }],
+    }),
+    db.dayFlavourStock.findMany(),
+    // Upcoming dates, so the editor can offer them as tick boxes.
+    db.collectionDay.findMany({
+      where: { day: { gte: todayUk() } },
+      orderBy: { day: "asc" },
+      select: { day: true, capacity: true },
+    }),
+  ]);
+
+  return NextResponse.json({
+    flavours: flavours.map((f) => ({
+      ...f,
+      dateStock: dayStock
+        .filter((d) => d.flavourId === f.id)
+        .map((d) => ({ iso: d.day.toISOString(), stock: d.stock })),
+    })),
+    days: days.map((d) => ({
+      iso: d.day.toISOString(),
+      label: dayLabel(d.day),
+      capacity: d.capacity,
+    })),
   });
-  return NextResponse.json({ flavours });
 }
 
 /** Create or update. Omit id to create. */
@@ -27,10 +50,15 @@ export async function POST(req: Request) {
     nameImage?: string;
     maxPerOrder?: number | null;
     stockPerDay?: number | null;
-    allowSeparate?: boolean;
+    serving?: "CHOICE" | "ON_SLICE" | "IN_TUB";
+    selectedDatesOnly?: boolean;
+    /// Which dates it's offered on, and how many. Only sent when the flavour
+    /// is limited to selected dates.
+    dateStock?: { iso: string; stock: number }[];
     hasExtraSauce?: boolean;
     sauceIds?: string[];
     toppingIds?: string[];
+    maxSauces?: number;
     maxToppings?: number;
     active?: boolean;
     sortOrder?: number;
@@ -56,10 +84,12 @@ export async function POST(req: Request) {
       b.stockPerDay && Number(b.stockPerDay) > 0
         ? Math.floor(Number(b.stockPerDay))
         : null,
-    allowSeparate: b.allowSeparate ?? true,
+    serving: b.serving ?? "CHOICE",
+    selectedDatesOnly: b.selectedDatesOnly ?? false,
     hasExtraSauce: b.hasExtraSauce ?? true,
     sauceIds: b.sauceIds ?? [],
     toppingIds: b.toppingIds ?? [],
+    maxSauces: Math.max(1, Math.floor(Number(b.maxSauces) || 1)),
     maxToppings: Math.max(1, Math.floor(Number(b.maxToppings) || 2)),
     active: b.active ?? true,
     sortOrder: b.sortOrder ?? 0,
@@ -68,6 +98,19 @@ export async function POST(req: Request) {
   const flavour = b.id
     ? await db.flavour.update({ where: { id: b.id }, data })
     : await db.flavour.create({ data });
+
+  // Replace the date list wholesale: what you saved is what it's offered on.
+  if (b.dateStock) {
+    await db.dayFlavourStock.deleteMany({ where: { flavourId: flavour.id } });
+    if (b.dateStock.length)
+      await db.dayFlavourStock.createMany({
+        data: b.dateStock.map((d) => ({
+          day: midnightUtc(d.iso),
+          flavourId: flavour.id,
+          stock: Math.max(0, Math.floor(d.stock)),
+        })),
+      });
+  }
 
   return NextResponse.json({ ok: true, flavour });
 }
