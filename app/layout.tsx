@@ -28,6 +28,17 @@ export const metadata: Metadata = {
   },
   description:
     "Homemade. Premium. Baked with love. San Sebastián cheesecakes by the slice, collection only, Batley.",
+
+  /*
+   * The demo runs the same code at its own address. Without this, search
+   * engines would index it alongside the real shop — customers finding a
+   * test copy in Google, and two sites competing for the same searches.
+   *
+   * Set NEXT_PUBLIC_DEMO=true on the demo project only.
+   */
+  ...(process.env.NEXT_PUBLIC_DEMO === "true"
+    ? { robots: { index: false, follow: false, nocache: true } }
+    : {}),
 };
 
 export default function RootLayout({
@@ -40,6 +51,14 @@ export default function RootLayout({
       <body
         className={`${display.variable} ${body.variable} flex min-h-[100dvh] flex-col bg-cream font-body text-ink antialiased`}
       >
+        {/* Impossible to mistake a demo tab for the real shop, which
+            matters when both are open at once. */}
+        {process.env.NEXT_PUBLIC_DEMO === "true" && (
+          <p className="bg-bad px-4 py-1.5 text-center text-[12px] font-semibold uppercase tracking-wide text-white">
+            Demo site — test orders only, nothing here is real
+          </p>
+        )}
+
         <Header />
         <div className="grow">{children}</div>
         <Footer />
