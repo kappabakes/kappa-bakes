@@ -122,6 +122,10 @@ async function shape(d: {
   let specialLeft = 0;
   let specialCapacity = 0;
   for (const row of Object.values(perFlavour)) {
+    // A special not offered on this date contributes nothing. Its stock
+    // figure still exists — it's what the flavour makes on a date it IS
+    // offered — but counting it here would show slices that can't be sold.
+    if (!row.offered) continue;
     if (row.stock === null || row.stock === undefined) continue;
     specialLeft += row.left ?? 0;
     specialCapacity += row.stock;

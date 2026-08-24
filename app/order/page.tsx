@@ -210,7 +210,9 @@ function OrderPageInner() {
   /** True when this flavour is made in a fixed quantity of its own. */
   const hasOwnStock = (id: string) => {
     const own = dayIso ? stock[dayIso]?.[id] : undefined;
-    return Boolean(own && own.stock !== null && own.stock !== undefined);
+    return Boolean(
+      own && own.offered && own.stock !== null && own.stock !== undefined
+    );
   };
 
   /** Slices chosen that come out of the day's general pool. */
@@ -571,13 +573,24 @@ function OrderPageInner() {
                                   Limited to {f.maxPerOrder} per order
                                 </p>
                               )}
-                              {hasOwnStock(f.id) &&
-                                left !== null &&
-                                left <= 5 && (
-                                  <p className="mt-1 text-[11px] font-semibold text-gold-hover">
-                                    Only {left} left
-                                  </p>
-                                )}
+                              {/*
+                                A running count for anything made in a fixed
+                                quantity. Always shown rather than only when
+                                low: on a special, "6 left" is the reason to
+                                order now. It refreshes with the rest of the
+                                page every 20 seconds.
+                              */}
+                              {hasOwnStock(f.id) && left !== null && (
+                                <p
+                                  className={[
+                                    "mt-1 text-[11px] font-semibold",
+                                    left <= 5 ? "text-bad" : "text-gold-hover",
+                                  ].join(" ")}
+                                >
+                                  {left} slice{left === 1 ? "" : "s"} left
+                                  {left <= 5 && " — going fast"}
+                                </p>
+                              )}
                             </>
                           )}
                           {f.allergens.length > 0 && (
