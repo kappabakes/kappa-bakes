@@ -40,6 +40,7 @@ export async function GET(req: Request) {
 
   const stripe = getStripe();
   let released = 0;
+  let recovered = 0;
 
   for (const order of stale) {
     try {
@@ -47,7 +48,31 @@ export async function GET(req: Request) {
         order.stripeSessionId!
       );
 
-      if (session.status === "open") {
+      if (session.status === "complete") {
+        /*
+         * They paid and the webhook never landed — a bad endpoint URL, a
+         * deployment that moved, a delivery that failed and hasn't retried
+         * yet. Whatever the cause, someone has paid and has no order.
+         *
+         * Confirming here does exactly what the webhook would have: marks it
+         * paid, sends the confirmation, records the payment. Safe to run more
+         * than once, because markPaid stops if the order is already paid.
+         */
+        if (session.payment_status === "paid") {
+          console.warn(
+            `${order.orderNo} was paid but never confirmed — confirming now.`
+          );
+          const { markPaid } = await import("@/lib/confirm");
+          await markPaid(
+            order.id,
+            typeof session.payment_intent === "string"
+              ? session.payment_intent
+              : null,
+            false
+          );
+          recovered++;
+        }
+      } else if (session.status === "open") {
         // The webhook takes it from here and frees the slices.
         await stripe.checkout.sessions.expire(order.stripeSessionId!);
         released++;
@@ -60,11 +85,11 @@ export async function GET(req: Request) {
         });
         released++;
       }
-      // "complete" means they paid: leave it entirely alone.
+
     } catch (e) {
       console.error(`Sweep failed for ${order.orderNo}`, e);
     }
   }
 
-  return NextResponse.json({ checked: stale.length, released });
+  return NextResponse.json({ checked: stale.length, released, recovered });
 }

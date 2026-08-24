@@ -141,7 +141,9 @@ export function TestTools({ flash }: { flash: (m: string) => void }) {
             const d = await r.json();
             flash(
               r.ok
-                ? `Checked ${d.checked}, released ${d.released}`
+                ? `Checked ${d.checked}, released ${d.released}${
+                    d.recovered ? `, ${d.recovered} paid order recovered` : ""
+                  }`
                 : "Couldn't run the sweep."
             );
           }}
