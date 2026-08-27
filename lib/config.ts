@@ -8,6 +8,9 @@ export const SHOP = {
     "San Sebastián cheesecake, baked to order and sold by the slice. When they're gone, they're gone.",
   addressLines: ["95 Woodfield Avenue", "Batley", "West Yorkshire", "WF17 7DU"],
   postcode: "WF17 7DU",
+  /// Town and county only — safe to show publicly. The street address goes
+  /// out with the confirmation, once someone has actually ordered.
+  area: "Batley, West Yorkshire",
   email: "orders@kappabakes.com",
   /// Drop your logo at public/logo.png (square, transparent background).
   logo: "/logo.png",

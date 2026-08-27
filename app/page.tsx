@@ -31,6 +31,10 @@ export default async function Home() {
               San Sebastián Cheesecakes
               <br />
               Collection only
+              <br />
+              <span className="mt-1 inline-block font-medium text-ink">
+                📍 {SHOP.area}
+              </span>
             </p>
             <Link
               href="/order"
