@@ -23,6 +23,7 @@ type Slice = {
   placement?: string | null;
   extraSauce?: string | null;
   addedSauce?: { name: string } | null;
+  addedSauces?: { name: string; warm?: boolean }[] | null;
   addedToppings?: { name: string }[] | null;
 };
 
@@ -81,7 +82,13 @@ async function breakdown(day: Date) {
       if (s.extraSauce === "in a tub") r.extraInTub++;
       else if (s.extraSauce) r.extraOnSlice++;
 
-      if (s.addedSauce)
+      // Warm counted separately: it's a different job at the counter, and
+      // "2 warm" is the number you need while packing.
+      for (const x of s.addedSauces ?? []) {
+        const key = x.warm ? `${x.name} (warm)` : x.name;
+        r.sauces[key] = (r.sauces[key] ?? 0) + 1;
+      }
+      if (!s.addedSauces?.length && s.addedSauce)
         r.sauces[s.addedSauce.name] = (r.sauces[s.addedSauce.name] ?? 0) + 1;
       for (const t of s.addedToppings ?? [])
         r.toppings[t.name] = (r.toppings[t.name] ?? 0) + 1;

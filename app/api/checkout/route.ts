@@ -38,6 +38,7 @@ type Incoming = {
     toppings: string | null;
     extraSauce?: string | null;
     addedSauceIds?: string[];
+    warmSauceIds?: string[];
     addedToppingIds?: string[];
   }[];
 };

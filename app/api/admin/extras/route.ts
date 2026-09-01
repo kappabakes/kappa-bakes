@@ -24,6 +24,7 @@ export async function POST(req: Request) {
     pricePence: number;
     active?: boolean;
     canTub?: boolean;
+    warm?: "NEVER" | "CHOICE" | "ALWAYS";
     sortOrder?: number;
   };
 
@@ -38,6 +39,7 @@ export async function POST(req: Request) {
     pricePence: Math.round(b.pricePence),
     active: b.active ?? true,
     canTub: b.canTub ?? true,
+    warm: b.warm ?? "NEVER",
     sortOrder: b.sortOrder ?? 0,
   };
 

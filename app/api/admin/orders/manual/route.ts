@@ -36,6 +36,7 @@ export async function POST(req: Request) {
       toppings: string | null;
       extraSauce?: string | null;
       addedSauceIds?: string[];
+    warmSauceIds?: string[];
       addedToppingIds?: string[];
     }[];
     paymentMethod: string;

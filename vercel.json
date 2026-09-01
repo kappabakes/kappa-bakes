@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/sweep-checkouts",
-      "schedule": "*/5 * * * *"
+      "schedule": "*/20 * * * *"
     },
     {
       "path": "/api/cron/low-stock",

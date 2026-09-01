@@ -14,7 +14,12 @@ export type SliceLine = {
   placement?: string | null;
   /// null when they didn't want it; otherwise where the extra pot goes.
   extraSauce?: string | null;
-  addedSauces?: { name: string; pricePence: number; placement?: string }[] | null;
+  addedSauces?: {
+    name: string;
+    pricePence: number;
+    placement?: string;
+    warm?: boolean;
+  }[] | null;
   /// Older orders stored a single sauce.
   addedSauce?: { name: string } | null;
   addedToppings?: { name: string; pricePence: number }[] | null;
@@ -35,11 +40,13 @@ export function summarise(slices: SliceLine[]): string[] {
         : s.flavour;
     if (s.extraSauce) key += ` + extra sauce (${s.extraSauce})`;
     const sauceNames = s.addedSauces?.length
-      ? s.addedSauces.map((x) =>
-          x.placement && x.placement !== s.placement
-            ? `${x.name} (${x.placement})`
-            : x.name
-        )
+      ? s.addedSauces.map((x) => {
+          const notes = [
+            x.placement && x.placement !== s.placement ? x.placement : null,
+            x.warm ? "warm" : null,
+          ].filter(Boolean);
+          return notes.length ? `${x.name} (${notes.join(", ")})` : x.name;
+        })
       : s.addedSauce
         ? [s.addedSauce.name]
         : [];

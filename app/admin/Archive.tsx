@@ -23,7 +23,7 @@ type Slice = {
   toppings: string | null;
   placement?: string | null;
   extraSauce?: string | null;
-  addedSauces?: { name: string; placement?: string }[] | null;
+  addedSauces?: { name: string; placement?: string; warm?: boolean }[] | null;
   addedSauce?: { name: string } | null;
   addedToppings?: { name: string }[] | null;
 };
@@ -53,7 +53,7 @@ function summarise(slices: Slice[]) {
         : s.flavour;
     if (s.extraSauce) key += ` + EXTRA SAUCE (${s.extraSauce})`;
     const sauces = s.addedSauces?.length
-      ? s.addedSauces.map((x) => x.name)
+      ? s.addedSauces.map((x) => (x.warm ? `${x.name} WARM` : x.name))
       : s.addedSauce
         ? [s.addedSauce.name]
         : [];

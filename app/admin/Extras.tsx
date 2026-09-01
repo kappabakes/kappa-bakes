@@ -11,6 +11,7 @@ type Extra = {
   pricePence: number;
   active: boolean;
   canTub: boolean;
+  warm: "NEVER" | "CHOICE" | "ALWAYS";
   sortOrder: number;
 };
 
@@ -147,6 +148,7 @@ function Group({
                       pricePence: e.pricePence,
                       active: e.active,
                       canTub: ev.target.checked,
+                      warm: e.warm,
                     })
                   }
                   className="h-4 w-4 accent-gold"
@@ -166,12 +168,37 @@ function Group({
                     pricePence: e.pricePence,
                     active: ev.target.checked,
                     canTub: e.canTub,
+                    warm: e.warm,
                   })
                 }
                 className="h-4 w-4 accent-gold"
               />
               Available
             </label>
+            {kind === "SAUCE" && (
+              <label className="flex items-center gap-2 text-[13px] text-ink2">
+                Warm
+                <select
+                  value={e.warm}
+                  onChange={(ev) =>
+                    save({
+                      id: e.id,
+                      name: e.name,
+                      pricePence: e.pricePence,
+                      active: e.active,
+                      canTub: e.canTub,
+                      warm: ev.target.value as Extra["warm"],
+                    })
+                  }
+                  className="rounded-btn border border-field bg-paper px-2 py-1 text-[13px] text-ink focus:border-gold focus:outline-none"
+                >
+                  <option value="NEVER">Not offered</option>
+                  <option value="CHOICE">Customer chooses</option>
+                  <option value="ALWAYS">Always warm</option>
+                </select>
+              </label>
+            )}
+
             <button
               onClick={() => remove(e)}
               className="ml-auto rounded-btn border border-navy bg-bad px-3 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90"

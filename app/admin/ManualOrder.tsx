@@ -23,6 +23,7 @@ type Extra = {
   name: string;
   pricePence: number;
   active: boolean;
+  warm: "NEVER" | "CHOICE" | "ALWAYS";
 };
 type Day = { iso: string; label: string; left: number; capacity: number };
 type Line = {
@@ -30,6 +31,7 @@ type Line = {
   toppings: string | null;
   extraSauce: string | null;
   addedSauceIds: string[];
+  warmSauceIds: string[];
   addedToppingIds: string[];
 };
 
@@ -215,6 +217,7 @@ export function ManualOrder({
                               // Extras are per flavour, so a change clears
                               // anything the new one doesn't offer.
                               addedSauceIds: [],
+                  warmSauceIds: [],
                               addedToppingIds: [],
                             }
                           : x
@@ -379,6 +382,47 @@ export function ManualOrder({
                     }
                   )}
 
+
+                {l.addedSauceIds.map((sid) => {
+                  const e = extras.find((x) => x.id === sid);
+                  if (!e || e.kind !== "SAUCE") return null;
+                  if (e.warm === "ALWAYS")
+                    return (
+                      <span key={sid} className="text-xs text-ink2">
+                        {e.name} warm
+                      </span>
+                    );
+                  if (e.warm !== "CHOICE") return null;
+                  return (
+                    <label
+                      key={sid}
+                      className="flex items-center gap-1.5 text-xs text-ink2"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={l.warmSauceIds.includes(sid)}
+                        onChange={(ev) =>
+                          setLines(
+                            lines.map((x, j) =>
+                              j === i
+                                ? {
+                                    ...x,
+                                    warmSauceIds: ev.target.checked
+                                      ? [...x.warmSauceIds, sid]
+                                      : x.warmSauceIds.filter(
+                                          (y) => y !== sid
+                                        ),
+                                  }
+                                : x
+                            )
+                          )
+                        }
+                        className="h-3.5 w-3.5 accent-gold"
+                      />
+                      Warm {e.name}
+                    </label>
+                  );
+                })}
                 <button
                   onClick={() => setLines(lines.filter((_, j) => j !== i))}
                   className="text-xs text-ink2 underline underline-offset-4"
@@ -400,6 +444,7 @@ export function ManualOrder({
                   toppings: flavours[0].hasToppings ? "on the slice" : null,
                   extraSauce: null,
                   addedSauceIds: [],
+                  warmSauceIds: [],
                   addedToppingIds: [],
                 },
               ])

@@ -20,7 +20,12 @@ type Slice = {
   toppings: string | null;
   placement?: string | null;
   extraSauce?: string | null;
-  addedSauces?: { name: string; pricePence: number; placement?: string }[] | null;
+  addedSauces?: {
+    name: string;
+    pricePence: number;
+    placement?: string;
+    warm?: boolean;
+  }[] | null;
   /// Older orders stored a single sauce.
   addedSauce?: { name: string } | null;
   addedToppings?: { name: string; pricePence: number }[] | null;
@@ -142,13 +147,20 @@ export default async function Confirmed({
                             : "Sauce: "}
                           {line.addedSauces?.length
                             ? line.addedSauces
-                                .map((x) =>
-                                  // Only worth spelling out when it differs
-                                  // from where the rest of the slice is going.
-                                  x.placement && x.placement !== line.placement
-                                    ? `${x.name} (${x.placement})`
-                                    : x.name
-                                )
+                                .map((x) => {
+                                  // Only spell out what differs from the rest
+                                  // of the slice, so it stays readable.
+                                  const notes = [
+                                    x.placement &&
+                                    x.placement !== line.placement
+                                      ? x.placement
+                                      : null,
+                                    x.warm ? "warm" : null,
+                                  ].filter(Boolean);
+                                  return notes.length
+                                    ? `${x.name} (${notes.join(", ")})`
+                                    : x.name;
+                                })
                                 .join(", ")
                             : line.addedSauce?.name}
                         </p>

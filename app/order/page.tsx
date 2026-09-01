@@ -71,6 +71,7 @@ type Extra = {
   kind: "SAUCE" | "TOPPING";
   name: string;
   pricePence: number;
+  warm: "NEVER" | "CHOICE" | "ALWAYS";
 };
 
 /**
@@ -90,6 +91,8 @@ type Slice = {
   /// toppings are in a tub can only have the extra in a tub too.
   extra: string | null;
   sauceIds: string[];
+  /// The subset of those they've asked to have warmed.
+  warmSauceIds: string[];
   toppingIds: string[];
 };
 type Picks = Record<string, Slice[]>;
@@ -270,7 +273,13 @@ function OrderPageInner() {
       ...picks,
       [f.id]: [
         ...(picks[f.id] ?? []),
-        { separate: false, extra: null, sauceIds: [], toppingIds: [] },
+        {
+          separate: false,
+          extra: null,
+          sauceIds: [],
+          warmSauceIds: [],
+          toppingIds: [],
+        },
       ],
     });
     setError(null);
@@ -306,6 +315,7 @@ function OrderPageInner() {
             : "on the slice",
         extraSauce: s.extra,
         addedSauceIds: s.sauceIds,
+        warmSauceIds: s.warmSauceIds,
         addedToppingIds: s.toppingIds,
       }));
     });
@@ -802,6 +812,7 @@ function OrderPageInner() {
                                               sauceIds: e.target.checked
                                                 ? [sauces[0].id]
                                                 : [],
+                                              warmSauceIds: [],
                                             })
                                           }
                                           className="h-4 w-4 accent-gold"
@@ -856,9 +867,15 @@ function OrderPageInner() {
                                                     if (e.target.value)
                                                       next[n] = e.target.value;
                                                     else next.splice(n, 1);
+                                                    const kept =
+                                                      next.filter(Boolean);
                                                     setSlice(f.id, i, {
-                                                      sauceIds:
-                                                        next.filter(Boolean),
+                                                      sauceIds: kept,
+                                                      warmSauceIds:
+                                                        slice.warmSauceIds.filter(
+                                                          (x) =>
+                                                            kept.includes(x)
+                                                        ),
                                                     });
                                                   }}
                                                   className="w-full rounded-btn border border-field bg-paper px-2 py-2 text-[13px] text-ink focus:border-gold focus:outline-none"
@@ -886,6 +903,57 @@ function OrderPageInner() {
                                           )}
                                         </div>
                                       )}
+
+                                      {/* Warm is per sauce, not per slice:
+                                          one might need warming and another
+                                          not. */}
+                                      {slice.sauceIds.map((id) => {
+                                        const e = extras.find(
+                                          (x) => x.id === id
+                                        );
+                                        if (!e) return null;
+
+                                        if (e.warm === "ALWAYS")
+                                          return (
+                                            <p
+                                              key={id}
+                                              className="mt-1.5 text-[11px] text-ink2"
+                                            >
+                                              {e.name} is served warm.
+                                            </p>
+                                          );
+
+                                        if (e.warm !== "CHOICE") return null;
+
+                                        return (
+                                          <label
+                                            key={id}
+                                            className="mt-1.5 flex cursor-pointer items-center gap-2.5 text-[13px] text-ink"
+                                          >
+                                            <input
+                                              type="checkbox"
+                                              checked={slice.warmSauceIds.includes(
+                                                id
+                                              )}
+                                              onChange={(ev) =>
+                                                setSlice(f.id, i, {
+                                                  warmSauceIds: ev.target
+                                                    .checked
+                                                    ? [
+                                                        ...slice.warmSauceIds,
+                                                        id,
+                                                      ]
+                                                    : slice.warmSauceIds.filter(
+                                                        (x) => x !== id
+                                                      ),
+                                                })
+                                              }
+                                              className="h-4 w-4 accent-gold"
+                                            />
+                                            Warm the {e.name}
+                                          </label>
+                                        );
+                                      })}
 
                                       {slice.sauceIds.length > 0 && (
                                         <p className="mt-1 text-[11px] text-ink2">

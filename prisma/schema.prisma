@@ -28,6 +28,15 @@ enum ServingMode {
   IN_TUB
 }
 
+/// NEVER  — no warm option offered
+/// CHOICE — customer can tick for warm; cold unless they do
+/// ALWAYS — always served warm, no choice. For anything too solid cold.
+enum WarmOption {
+  NEVER
+  CHOICE
+  ALWAYS
+}
+
 enum ExtraKind {
   SAUCE
   TOPPING
@@ -42,6 +51,8 @@ model Extra {
   /// a proper sauce can. Off means it's always on the slice, whatever the
   /// flavour allows.
   canTub     Boolean   @default(true)
+  /// Whether this can be served warm, and whether the customer gets a say.
+  warm       WarmOption @default(NEVER)
   active     Boolean   @default(true)
   sortOrder  Int       @default(0)
 

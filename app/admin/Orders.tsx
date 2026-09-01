@@ -29,9 +29,17 @@ type Slice = {
   toppings: string | null;
   placement?: string | null;
   extraSauce?: string | null;
-  addedSauces?: { name: string; pricePence: number; placement?: string }[] | null;
+  addedSauces?: {
+    name: string;
+    pricePence: number;
+    placement?: string;
+    warm?: boolean;
+  }[] | null;
   addedSauce?: { name: string } | null;
   addedSauceIds?: string[];
+  /// Which of those were asked to be warmed. Stored on the order so an edit
+  /// can round-trip it.
+  warmSauceIds?: string[];
   addedToppings?: { name: string; pricePence: number }[] | null;
   addedToppingIds?: string[];
 };
@@ -42,6 +50,7 @@ type Extra = {
   name: string;
   pricePence: number;
   active: boolean;
+  warm: "NEVER" | "CHOICE" | "ALWAYS";
 };
 type Order = {
   id: string;
@@ -118,7 +127,7 @@ function summarise(slices: Slice[]) {
         : s.flavour;
     if (s.extraSauce) key += ` + EXTRA SAUCE (${s.extraSauce})`;
     const sauces = s.addedSauces?.length
-      ? s.addedSauces.map((x) => x.name)
+      ? s.addedSauces.map((x) => (x.warm ? `${x.name} WARM` : x.name))
       : s.addedSauce
         ? [s.addedSauce.name]
         : [];
@@ -853,6 +862,7 @@ function EditOrder({
       toppings: s.toppings,
       extraSauce: s.extraSauce ?? null,
       addedSauceIds: s.addedSauceIds ?? [],
+      warmSauceIds: s.warmSauceIds ?? [],
       addedToppingIds: s.addedToppingIds ?? [],
     }))
   );
@@ -1059,6 +1069,47 @@ function EditOrder({
                     }
                   )}
 
+
+                {s.addedSauceIds.map((sid) => {
+                  const e = extras.find((x) => x.id === sid);
+                  if (!e || e.kind !== "SAUCE") return null;
+                  if (e.warm === "ALWAYS")
+                    return (
+                      <span key={sid} className="text-xs text-ink2">
+                        {e.name} warm
+                      </span>
+                    );
+                  if (e.warm !== "CHOICE") return null;
+                  return (
+                    <label
+                      key={sid}
+                      className="flex items-center gap-1.5 text-xs text-ink2"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={s.warmSauceIds.includes(sid)}
+                        onChange={(ev) =>
+                          setSlices(
+                            slices.map((x, j) =>
+                              j === i
+                                ? {
+                                    ...x,
+                                    warmSauceIds: ev.target.checked
+                                      ? [...x.warmSauceIds, sid]
+                                      : x.warmSauceIds.filter(
+                                          (y) => y !== sid
+                                        ),
+                                  }
+                                : x
+                            )
+                          )
+                        }
+                        className="h-3.5 w-3.5 accent-gold"
+                      />
+                      Warm {e.name}
+                    </label>
+                  );
+                })}
                 <button
                   onClick={() => setSlices(slices.filter((_, j) => j !== i))}
                   className="text-xs text-ink2 underline underline-offset-4"
@@ -1079,6 +1130,7 @@ function EditOrder({
                   toppings: null,
                   extraSauce: null,
                   addedSauceIds: [],
+                  warmSauceIds: [],
                   addedToppingIds: [],
                 },
               ])

@@ -22,6 +22,9 @@ export type SliceChoice = {
   /// are in a tub can only have its extra sauce in a tub too.
   extraSauce?: string | null;
   addedSauceIds?: string[];
+  /// Which of those the customer asked to have warmed. Ignored for a sauce
+  /// that's always warm or never offered warm.
+  warmSauceIds?: string[];
   addedToppingIds?: string[];
 };
 
@@ -38,8 +41,14 @@ export type PricedLine = {
   /// Name and price are copied in, so a later price change can't rewrite
   /// what someone already paid. The ids come along as well, so the admin can
   /// edit an order without the choices being lost.
-  addedSauces: { name: string; pricePence: number; placement?: string }[];
+  addedSauces: {
+    name: string;
+    pricePence: number;
+    placement?: string;
+    warm?: boolean;
+  }[];
   addedSauceIds: string[];
+  warmSauceIds: string[];
   addedToppings: { name: string; pricePence: number }[];
   addedToppingIds: string[];
   pricePence: number;
@@ -112,6 +121,14 @@ export async function priceSlices(
       addedSauces.push({
         name: e.name,
         pricePence: e.pricePence,
+        // Decided here rather than taken from the browser: a sauce that has
+        // to be warm is always warm, whatever was submitted.
+        warm:
+          e.warm === "ALWAYS"
+            ? true
+            : e.warm === "CHOICE"
+              ? (c.warmSauceIds ?? []).includes(id)
+              : false,
         // A drizzle that can't be tubbed goes on the slice even when the rest
         // of the order is in a tub — so the record says what actually
         // happens rather than what was asked for.
@@ -160,6 +177,10 @@ export async function priceSlices(
       extraSauce,
       addedSauces,
       addedSauceIds: wantedSauces,
+      // Kept so the admin can edit an order without losing the request.
+      warmSauceIds: addedSauces
+        .map((x, n) => (x.warm ? wantedSauces[n] : null))
+        .filter((x): x is string => Boolean(x)),
       addedToppings,
       addedToppingIds: wanted,
       pricePence,
@@ -175,7 +196,7 @@ export function describeSlice(l: {
   toppings?: string | null;
   placement?: string | null;
   extraSauce?: string | null;
-  addedSauces?: { name: string }[] | null;
+  addedSauces?: { name: string; warm?: boolean }[] | null;
   addedToppings?: { name: string }[] | null;
 }): string[] {
   const bits: string[] = [];
@@ -184,7 +205,9 @@ export function describeSlice(l: {
   if (l.extraSauce) bits.push(`Extra sauce ${l.extraSauce}`);
   if (l.addedSauces?.length)
     bits.push(
-      `${l.addedSauces.length === 1 ? "Sauce" : "Sauces"}: ${l.addedSauces.map((x) => x.name).join(", ")}`
+      `${l.addedSauces.length === 1 ? "Sauce" : "Sauces"}: ${l.addedSauces
+        .map((x) => (x.warm ? `${x.name} (warm)` : x.name))
+        .join(", ")}`
     );
   if (l.addedToppings?.length)
     bits.push(`Toppings: ${l.addedToppings.map((t) => t.name).join(", ")}`);
