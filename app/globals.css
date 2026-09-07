@@ -1,0 +1,50 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body {
+  background: #faf7f1;
+  color: #09264a;
+  overscroll-behavior-y: none;
+}
+
+/* Safari gives date and time inputs their own intrinsic width and centres the
+   value inside them, so they sit wider than every other field and the text
+   drifts to the middle. None of that is reachable with a utility class. */
+input[type="date"],
+input[type="datetime-local"],
+input[type="time"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  text-align: left;
+}
+
+/* Stops iOS pushing the calendar glyph outside the rounded border. */
+input[type="date"]::-webkit-date-and-time-value,
+input[type="datetime-local"]::-webkit-date-and-time-value,
+input[type="time"]::-webkit-date-and-time-value {
+  text-align: left;
+  margin: 0;
+}
+
+/* The scalloped edge under the header, as in the mockups. */
+.wave-divider {
+  height: 26px;
+  background: #f6efe5;
+  -webkit-mask: radial-gradient(24px at 50% 0, transparent 99%, #000 101%);
+  mask: radial-gradient(24px at 50% 0, transparent 99%, #000 101%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
