@@ -18,6 +18,8 @@ type Record = {
     notes: string | null;
     allergensDiscussedAt: string | null;
     allergenText: string | null;
+    depositTermsAt: string | null;
+    depositTermsText: string | null;
     collectedAt: string | null;
     cancelledAt: string | null;
     cancelReason: string | null;
@@ -96,6 +98,14 @@ export default function WholeRecord({ params }: { params: { id: string } }) {
       />
       {o.allergenText && (
         <p className="mt-1 text-[12px] text-neutral-700">{o.allergenText}</p>
+      )}
+
+      <Row
+        k="Deposit terms explained"
+        v={o.depositTermsAt ? stamp(o.depositTermsAt) : "Not recorded"}
+      />
+      {o.depositTermsText && (
+        <p className="mt-1 text-[12px] text-neutral-700">{o.depositTermsText}</p>
       )}
 
       {o.collectedAt && <Row k="Collected" v={stamp(o.collectedAt)} />}

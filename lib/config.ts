@@ -114,6 +114,14 @@ export const HEADS_UP_NOTE =
   "your toppings. They go on fresh, and this keeps them from sliding before " +
   "you get home.";
 
+/**
+ * Read out when a whole-cake order is taken, and stated in the confirmation.
+ * Recorded on the order so there's a dated note of it having been said.
+ */
+export const DEPOSIT_TERMS =
+  "The deposit is non-refundable. The remaining balance is taken by " +
+  "contactless card payment on collection.";
+
 export const GRACE_MINUTES = 15;
 export const LATE_GRACE_MINUTES = 30;
 

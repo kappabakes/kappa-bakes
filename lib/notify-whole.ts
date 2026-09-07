@@ -65,7 +65,21 @@ export function buildWholeEmail(p: WholePayload) {
       : "";
 
   const html = `<!DOCTYPE html>
-<html><body style="margin:0;padding:0;background:#faf7f1;">
+<html>
+<head>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="format-detection" content="telephone=no,address=no,date=no" />
+  <style>
+    /* Mail apps auto-link addresses and phone numbers and colour them blue.
+       This leaves them looking like the text around them. */
+    a[x-apple-data-detectors], .address a {
+      color: inherit !important;
+      text-decoration: none !important;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body style="margin:0;padding:0;background:#faf7f1;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
          style="background:#faf7f1;padding:24px 12px;">
     <tr><td align="center">
@@ -92,12 +106,12 @@ export function buildWholeEmail(p: WholePayload) {
             .join("")}
 
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0;">
-            <tr><td style="font-size:16px;padding:4px 0;">Order total</td>
-                <td align="right" style="font-size:16px;padding:4px 0;">${money(p.totalPence)}</td></tr>
-            <tr><td style="font-size:16px;padding:4px 0;">Deposit taken</td>
-                <td align="right" style="font-size:16px;padding:4px 0;">${money(p.depositPence)}</td></tr>
-            <tr><td style="font-size:16px;padding:8px 0 4px;border-top:1px solid #eee5d6;font-weight:bold;">Balance due on collection</td>
-                <td align="right" style="font-size:16px;padding:8px 0 4px;border-top:1px solid #eee5d6;font-weight:bold;">${money(balance)}</td></tr>
+            <tr><td style="font-size:16px;padding:4px 16px 4px 0;">Order total</td>
+                <td align="right" style="font-size:16px;padding:4px 0;white-space:nowrap;">${money(p.totalPence)}</td></tr>
+            <tr><td style="font-size:16px;padding:4px 16px 4px 0;">Deposit taken</td>
+                <td align="right" style="font-size:16px;padding:4px 0;white-space:nowrap;">${money(p.depositPence)}</td></tr>
+            <tr><td style="font-size:16px;padding:8px 16px 4px 0;border-top:1px solid #eee5d6;font-weight:bold;">Balance due on collection</td>
+                <td align="right" style="font-size:16px;padding:8px 0 4px;border-top:1px solid #eee5d6;font-weight:bold;white-space:nowrap;">${money(balance)}</td></tr>
           </table>
 
           <p style="margin:0 0 24px;font-size:14px;line-height:1.5;color:#5b6b7f;">
@@ -108,12 +122,15 @@ export function buildWholeEmail(p: WholePayload) {
           <p style="margin:0 0 8px;font-size:13px;font-weight:bold;letter-spacing:.08em;color:#8a7a5c;">COLLECTION ADDRESS:</p>
           ${p.address
             .map(
-              (l) => `<p style="margin:0 0 2px;font-size:16px;">${l}</p>`
+              (l) =>
+                `<p class="address" style="margin:0 0 2px;font-size:16px;color:#09264a;">${l}</p>`
             )
             .join("")}
-          <p style="margin:12px 0 24px;font-size:16px;font-weight:bold;">
-            ${day} ${date} at ${time}
-          </p>
+          <p style="margin:20px 0 8px;font-size:13px;font-weight:bold;letter-spacing:.08em;color:#8a7a5c;">COLLECTION DATE:</p>
+          <p style="margin:0 0 16px;font-size:16px;font-weight:bold;">${day} ${date}</p>
+
+          <p style="margin:0 0 8px;font-size:13px;font-weight:bold;letter-spacing:.08em;color:#8a7a5c;">COLLECTION TIME:</p>
+          <p style="margin:0 0 24px;font-size:16px;font-weight:bold;">${time}</p>
 
           <p style="margin:0 0 24px;font-size:15px;line-height:1.5;">
             Please message us on WhatsApp 10 minutes before you arrive so we
@@ -155,7 +172,12 @@ export function buildWholeEmail(p: WholePayload) {
     "",
     "COLLECTION ADDRESS:",
     ...p.address,
-    `${day} ${date} at ${time}`,
+    "",
+    "COLLECTION DATE:",
+    `${day} ${date}`,
+    "",
+    "COLLECTION TIME:",
+    time,
     "",
     "Please message us on WhatsApp 10 minutes before you arrive so we can have your order ready.",
     "",
@@ -185,7 +207,19 @@ export function buildWholeReminder(p: WholePayload) {
   const wa = whatsappLink();
 
   const html = `<!DOCTYPE html>
-<html><body style="margin:0;padding:0;background:#faf7f1;">
+<html>
+<head>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="format-detection" content="telephone=no,address=no,date=no" />
+  <style>
+    a[x-apple-data-detectors], .address a {
+      color: inherit !important;
+      text-decoration: none !important;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body style="margin:0;padding:0;background:#faf7f1;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#faf7f1;padding:24px 12px;">
     <tr><td align="center">
       <table role="presentation" width="600" cellpadding="0" cellspacing="0"
@@ -205,8 +239,17 @@ export function buildWholeReminder(p: WholePayload) {
             .join("")}
 
           <p style="margin:16px 0 8px;font-size:13px;font-weight:bold;letter-spacing:.08em;color:#8a7a5c;">COLLECTION ADDRESS:</p>
-          ${p.address.map((l) => `<p style="margin:0 0 2px;font-size:16px;">${l}</p>`).join("")}
-          <p style="margin:12px 0 20px;font-size:16px;font-weight:bold;">${day} ${date} at ${time}</p>
+          ${p.address
+            .map(
+              (l) =>
+                `<p class="address" style="margin:0 0 2px;font-size:16px;color:#09264a;">${l}</p>`
+            )
+            .join("")}
+          <p style="margin:16px 0 8px;font-size:13px;font-weight:bold;letter-spacing:.08em;color:#8a7a5c;">COLLECTION DATE:</p>
+          <p style="margin:0 0 16px;font-size:16px;font-weight:bold;">${day} ${date}</p>
+
+          <p style="margin:0 0 8px;font-size:13px;font-weight:bold;letter-spacing:.08em;color:#8a7a5c;">COLLECTION TIME:</p>
+          <p style="margin:0 0 20px;font-size:16px;font-weight:bold;">${time}</p>
 
           ${
             balance > 0
@@ -249,7 +292,13 @@ export function buildWholeReminder(p: WholePayload) {
     "",
     "COLLECTION ADDRESS:",
     ...p.address,
-    `${day} ${date} at ${time}`,
+    "",
+    "COLLECTION DATE:",
+    `${day} ${date}`,
+    "",
+    "COLLECTION TIME:",
+    time,
+    "",
     balance > 0
       ? `Balance due on collection: ${money(balance)}, by contactless card.`
       : "",

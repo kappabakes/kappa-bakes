@@ -34,7 +34,7 @@ export async function sendReminders(forDay?: Date) {
   let failed = 0;
 
   for (const order of orders) {
-    const { subject, body } = buildReminderEmail(
+    const { subject, body, html } = buildReminderEmail(
       {
         orderNo: order.orderNo,
         firstName: order.firstName,
@@ -49,7 +49,7 @@ export async function sendReminders(forDay?: Date) {
       address
     );
 
-    const status = await sendEmail(order.email, subject, body);
+    const status = await sendEmail(order.email, subject, body, html);
     if (status === "Sent" || status.startsWith("Skipped")) sent++;
     else failed++;
 

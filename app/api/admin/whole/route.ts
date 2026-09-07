@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { currentAdmin } from "@/lib/auth";
 import { db } from "@/lib/stock";
 import { collectionAddress } from "@/lib/settings";
-import { ALLERGEN_NOTICE } from "@/lib/config";
+import { ALLERGEN_NOTICE, DEPOSIT_TERMS } from "@/lib/config";
 import { normaliseItem, WholeItem } from "@/lib/whole";
 import { notifyWhole } from "@/lib/notify-whole";
 import { WholeStatus } from "@prisma/client";
@@ -77,6 +77,7 @@ export async function POST(req: Request) {
     depositPence: number;
     notes?: string;
     allergensDiscussed?: boolean;
+    depositTermsExplained?: boolean;
     notify?: boolean;
   };
 
@@ -117,6 +118,9 @@ export async function POST(req: Request) {
     notes: b.notes?.trim() || null,
     ...(b.allergensDiscussed
       ? { allergensDiscussedAt: new Date(), allergenText: ALLERGEN_NOTICE }
+      : {}),
+    ...(b.depositTermsExplained
+      ? { depositTermsAt: new Date(), depositTermsText: DEPOSIT_TERMS }
       : {}),
   };
 

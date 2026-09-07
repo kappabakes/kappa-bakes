@@ -1,4 +1,11 @@
 import {
+  emailShell,
+  heading,
+  para,
+  addressBlock,
+  linkButton,
+} from "./email-layout";
+import {
   SHOP,
   money,
   shortDay,
@@ -74,44 +81,88 @@ export type Payload = {
 
 export function buildEmail(p: Payload, updated = false) {
   const verb = updated ? "has been updated" : "is confirmed and paid";
+  const address = p.address ?? SHOP.addressLines;
+  const lines = summarise(p.slices);
+  const track = trackLink(p);
+  const wa = whatsappLink();
+
+  const text = [
+    `Hi ${p.firstName}, your ${SHOP.name} order ${p.orderNo} ${verb}.`,
+    "",
+    "YOUR ORDER",
+    `${p.slices.length} slice${p.slices.length === 1 ? "" : "s"}`,
+    ...lines,
+    "",
+    `Paid ${money(p.totalPence)}`,
+    "Nothing to pay at the door — just give your order number.",
+    "",
+    "COLLECTION ADDRESS:",
+    ...address,
+    "",
+    "COLLECTION DATE:",
+    shortDay(p.day),
+    "",
+    "COLLECTION TIME:",
+    p.window,
+    "",
+    HEADS_UP_NOTE,
+    "",
+    GRACE_NOTE,
+    "",
+    `Track your order: ${track}`,
+    "",
+    ...(wa
+      ? [
+          "If you have any questions, please message on WhatsApp by clicking the link below:",
+          wa,
+          "",
+        ]
+      : []),
+    NO_SHOW_POLICY,
+  ].join("\n");
+
+  const html = emailShell(
+    [
+      para(`Hi ${p.firstName},`),
+      para(`Your order <strong>${p.orderNo}</strong> ${verb}.`),
+
+      heading("YOUR ORDER"),
+      para(
+        `${p.slices.length} slice${p.slices.length === 1 ? "" : "s"}`,
+        "margin-bottom:6px;color:#5b6b7f;font-size:14px;"
+      ),
+      lines.map((l) => para(l, "margin-bottom:4px;")).join(""),
+
+      `<p style="margin:16px 0 4px;font-size:16px;font-weight:bold;">Paid ${money(p.totalPence)}</p>`,
+      para(
+        "Nothing to pay at the door — just give your order number.",
+        "color:#5b6b7f;font-size:14px;"
+      ),
+
+      heading("COLLECTION ADDRESS:"),
+      addressBlock(address),
+
+      heading("COLLECTION DATE:"),
+      para(shortDay(p.day), "font-weight:bold;"),
+
+      heading("COLLECTION TIME:"),
+      para(p.window, "font-weight:bold;"),
+
+      para(HEADS_UP_NOTE, "font-size:15px;"),
+      linkButton(track, "Track your order"),
+      para(GRACE_NOTE, "font-size:14px;color:#5b6b7f;"),
+      para(NO_SHOW_POLICY, "font-size:13px;color:#5b6b7f;"),
+    ].join(""),
+    "Any questions, message us on WhatsApp."
+  );
+
   return {
     subject: `${SHOP.name} order ${p.orderNo}${updated ? " updated" : " confirmed"}`,
-    body: [
-      `Hi ${p.firstName}, your ${SHOP.name} order ${p.orderNo} ${verb}.`,
-      "",
-      "Collection",
-      `${shortDay(p.day)}, ${p.window}`,
-      "",
-      ...(p.address ?? SHOP.addressLines),
-      "",
-      `Your order (${p.slices.length} slice${p.slices.length === 1 ? "" : "s"})`,
-      ...summarise(p.slices),
-      "",
-      `Paid ${money(p.totalPence)}`,
-      "",
-      "Nothing to pay at the door — just give your order number.",
-      "",
-      HEADS_UP_NOTE,
-      "",
-      GRACE_NOTE,
-      "",
-      `Track your order: ${trackLink(p)}`,
-      "",
-      // Only when a number is configured — an orphan heading with no link
-      // under it would look broken.
-      ...(whatsappLink()
-        ? [
-            "If you have any questions, please message on WhatsApp by clicking the link below:",
-            whatsappLink()!,
-            "",
-          ]
-        : []),
-      // No sign-off: the sender already reads "Kappa Bakes", and a repeated
-      // trailing line gets collapsed by Gmail as though it were a signature.
-      NO_SHOW_POLICY,
-    ].join("\n"),
+    body: text,
+    html,
   };
 }
+
 
 /** Strip anything that would push the message out of GSM-7. */
 export const gsmSafe = (s: string) =>
@@ -242,9 +293,9 @@ export async function notifyCustomer(
   updated = false,
   channels: { email?: boolean; sms?: boolean } = { email: true, sms: true }
 ) {
-  const { subject, body } = buildEmail(p, updated);
+  const { subject, body, html } = buildEmail(p, updated);
   const emailStatus = channels.email
-    ? await sendEmail(p.email, subject, body)
+    ? await sendEmail(p.email, subject, body, html)
     : "Not sent";
   const smsStatus = channels.sms
     ? await sendSms(p.mobile, buildSms(p, updated))
@@ -258,33 +309,70 @@ export async function notifyCustomer(
  * else.
  */
 export function buildReminderEmail(p: Payload, address: string[]) {
+  const lines = summarise(p.slices);
+
+  const text = [
+    `Hi ${p.firstName}, your ${SHOP.name} order will be ready to collect today within the collection slot stated below.`,
+    "",
+    "YOUR ORDER",
+    `${p.slices.length} slice${p.slices.length === 1 ? "" : "s"}`,
+    ...lines,
+    "",
+    "COLLECTION ADDRESS:",
+    ...address,
+    "",
+    "COLLECTION DATE:",
+    shortDay(p.day),
+    "",
+    "COLLECTION TIME:",
+    p.window,
+    "",
+    `Order number: ${p.orderNo}`,
+    "Nothing to pay at the door — just give your order number.",
+    "",
+    HEADS_UP_NOTE,
+    "",
+    GRACE_NOTE,
+    "",
+    "See you shortly.",
+  ].join("\n");
+
+  const html = emailShell(
+    [
+      para(`Hi ${p.firstName},`),
+      para(
+        "Your order will be ready to collect today within the collection slot below."
+      ),
+
+      heading("YOUR ORDER"),
+      lines.map((l) => para(l, "margin-bottom:4px;")).join(""),
+      para(
+        `Order number <strong>${p.orderNo}</strong> — nothing to pay at the door.`,
+        "margin-top:12px;font-size:15px;"
+      ),
+
+      heading("COLLECTION ADDRESS:"),
+      addressBlock(address),
+
+      heading("COLLECTION DATE:"),
+      para(shortDay(p.day), "font-weight:bold;"),
+
+      heading("COLLECTION TIME:"),
+      para(p.window, "font-weight:bold;"),
+
+      para(HEADS_UP_NOTE, "font-size:15px;"),
+      para(GRACE_NOTE, "font-size:14px;color:#5b6b7f;"),
+    ].join(""),
+    "Any questions, message us on WhatsApp."
+  );
+
   return {
-    // The time is in the subject as well: someone reading a notification on
-    // a lock screen shouldn't be able to take "ready to collect" as "ready
-    // now" — which is how one person turned up hours early.
     subject: `Collecting today, ${p.window} — ${SHOP.name} order ${p.orderNo}`,
-    body: [
-      `Hi ${p.firstName}, your ${SHOP.name} order will be ready to collect today within the collection slot stated below.`,
-      "",
-      "Collection",
-      `${shortDay(p.day)}, ${p.window}`,
-      "",
-      ...address,
-      "",
-      `Your order (${p.slices.length} slice${p.slices.length === 1 ? "" : "s"})`,
-      ...summarise(p.slices),
-      "",
-      `Order number: ${p.orderNo}`,
-      "Nothing to pay at the door — just give your order number.",
-      "",
-      HEADS_UP_NOTE,
-      "",
-      GRACE_NOTE,
-      "",
-      "See you shortly.",
-    ].join("\n"),
+    body: text,
+    html,
   };
 }
+
 
 /** A tracking link that opens straight on their order, no details to retype. */
 function trackLink(p: Payload) {

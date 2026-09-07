@@ -20,6 +20,7 @@ type Order = {
   emailStatus: string | null;
   smsStatus: string | null;
   allergensDiscussedAt: string | null;
+  depositTermsAt: string | null;
   cancelReason: string | null;
   cancelNote: string | null;
 };
@@ -230,6 +231,7 @@ export function WholeOrders({
               <p className="mt-2 text-[12px] text-muted">
                 email {o.emailStatus ?? "—"} · sms {o.smsStatus ?? "—"}
                 {o.allergensDiscussedAt && " · allergens discussed"}
+                {o.depositTermsAt && " · deposit terms explained"}
               </p>
 
               <div className="mt-3 flex flex-wrap gap-2">
@@ -357,6 +359,9 @@ function WholeForm({
   const [allergens, setAllergens] = useState(
     Boolean(order?.allergensDiscussedAt)
   );
+  const [depositTerms, setDepositTerms] = useState(
+    Boolean(order?.depositTermsAt)
+  );
   const [notify, setNotify] = useState(!order);
   const [busy, setBusy] = useState(false);
 
@@ -382,6 +387,7 @@ function WholeForm({
         depositPence: Math.round(parseFloat(f.deposit || "0") * 100),
         notes: f.notes,
         allergensDiscussed: allergens,
+        depositTermsExplained: depositTerms,
         notify,
       }),
     });
@@ -571,6 +577,22 @@ function WholeForm({
             <span className="block text-[12px] text-ink2">
               Recorded on the order with a timestamp, the same as a customer
               ticking it online.
+            </span>
+          </span>
+        </label>
+
+        <label className="mt-3 flex items-start gap-3 text-[15px] text-ink">
+          <input
+            type="checkbox"
+            checked={depositTerms}
+            onChange={(e) => setDepositTerms(e.target.checked)}
+            className="mt-1 h-4 w-4 accent-gold"
+          />
+          <span>
+            Non-refundable deposit explained
+            <span className="block text-[12px] text-ink2">
+              Recorded with a timestamp. The confirmation states it too, but a
+              dated note of having said it is worth more if it's disputed.
             </span>
           </span>
         </label>

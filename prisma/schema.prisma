@@ -362,6 +362,11 @@ model WholeOrder {
   allergensDiscussedAt DateTime?
   allergenText         String?
 
+  /// That you told them the deposit isn't refundable. A verbal agreement
+  /// with a timestamp is worth having if it's ever disputed.
+  depositTermsAt   DateTime?
+  depositTermsText String?
+
   cancelledAt  DateTime?
   cancelReason String?
   cancelNote   String?
