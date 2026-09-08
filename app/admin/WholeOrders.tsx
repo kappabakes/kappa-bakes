@@ -2,7 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { money } from "@/lib/config";
-import { WholeItem, describeItem, balancePence } from "@/lib/whole";
+import {
+  WholeItem,
+  describeItem,
+  balancePence,
+  utcToUkWallTime,
+} from "@/lib/whole";
 import { Btn, Card, Field, PageHead, readError, adminBase } from "./ui";
 
 type Order = {
@@ -28,6 +33,7 @@ type Order = {
 
 const stamp = (iso: string) =>
   new Date(iso).toLocaleString("en-GB", {
+    timeZone: "Europe/London",
     weekday: "short",
     day: "2-digit",
     month: "2-digit",
@@ -347,14 +353,9 @@ function WholeForm({
     lastName: order?.lastName ?? "",
     email: order?.email ?? "",
     mobile: order?.mobile ?? "",
-    date: order ? order.collectAt.slice(0, 10) : "",
-    time: order
-      ? new Date(order.collectAt).toLocaleTimeString("en-GB", {
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: false,
-        })
-      : "14:00",
+    // Read back in UK time, so editing shows the time you typed.
+    date: order ? utcToUkWallTime(order.collectAt).date : "",
+    time: order ? utcToUkWallTime(order.collectAt).time : "14:00",
     total: order ? (order.totalPence / 100).toFixed(2) : "",
     deposit: order ? (order.depositPence / 100).toFixed(2) : "",
     requests: order?.requests ?? "",
@@ -389,7 +390,8 @@ function WholeForm({
         lastName: f.lastName,
         email: f.email,
         mobile: f.mobile,
-        collectAtIso: `${f.date}T${f.time}:00`,
+        collectDate: f.date,
+        collectTime: f.time,
         items,
         totalPence: Math.round(parseFloat(f.total || "0") * 100),
         depositPence: Math.round(parseFloat(f.deposit || "0") * 100),

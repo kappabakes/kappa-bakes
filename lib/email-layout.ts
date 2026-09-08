@@ -37,6 +37,7 @@ export function socialButtons() {
 
   return `${one("whatsapp.png", wa ?? "", "Contact us on WhatsApp")}
           ${one("instagram.png", SOCIALS.instagram.url, "Follow us on Instagram")}
+          ${one("tiktok.png", SOCIALS.tiktok.url, "Follow us on TikTok")}
           ${one("snapchat.png", SOCIALS.snapchat.url, "Add us on Snapchat")}`;
 }
 

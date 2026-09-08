@@ -142,6 +142,7 @@ export function buildWholeEmail(p: WholePayload) {
     "",
     wa ? `WhatsApp: ${wa}` : "",
     `Instagram: ${SOCIALS.instagram.url}`,
+    `TikTok: ${SOCIALS.tiktok.url}`,
     `Snapchat: ${SOCIALS.snapchat.url}`,
     "",
     "Any questions, message us on WhatsApp — this mailbox isn't monitored.",

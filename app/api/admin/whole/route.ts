@@ -3,7 +3,7 @@ import { currentAdmin } from "@/lib/auth";
 import { db } from "@/lib/stock";
 import { collectionAddress } from "@/lib/settings";
 import { ALLERGEN_NOTICE, DEPOSIT_TERMS } from "@/lib/config";
-import { normaliseItem, WholeItem } from "@/lib/whole";
+import { normaliseItem, ukWallTimeToUtc, WholeItem } from "@/lib/whole";
 import { notifyWhole } from "@/lib/notify-whole";
 import { WholeStatus } from "@prisma/client";
 
@@ -71,7 +71,8 @@ export async function POST(req: Request) {
     lastName: string;
     email: string;
     mobile: string;
-    collectAtIso: string;
+    collectDate: string;
+    collectTime: string;
     items: WholeItem[];
     totalPence: number;
     depositPence: number;
@@ -88,7 +89,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Email is needed." }, { status: 400 });
   if (!b.mobile?.trim())
     return NextResponse.json({ error: "Mobile is needed." }, { status: 400 });
-  if (!b.collectAtIso)
+  if (!b.collectDate || !b.collectTime)
     return NextResponse.json(
       { error: "Collection date and time are needed." },
       { status: 400 }
@@ -112,7 +113,8 @@ export async function POST(req: Request) {
     lastName: b.lastName.trim(),
     email: b.email.trim(),
     mobile: b.mobile.trim(),
-    collectAt: new Date(b.collectAtIso),
+    // Built from the wall time you typed, in UK time.
+    collectAt: ukWallTimeToUtc(b.collectDate, b.collectTime),
     items: items as unknown as object,
     totalPence: Math.max(0, Math.round(b.totalPence)),
     depositPence: Math.max(0, Math.round(b.depositPence)),

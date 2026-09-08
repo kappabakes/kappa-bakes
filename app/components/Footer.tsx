@@ -59,6 +59,15 @@ export function Footer() {
               <InstagramIcon />
             </a>
             <a
+              href={SOCIALS.tiktok.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`Follow us on TikTok, ${SOCIALS.tiktok.handle}`}
+              className="transition-opacity hover:opacity-80"
+            >
+              <TikTokIcon />
+            </a>
+            <a
               href={SOCIALS.snapchat.url}
               target="_blank"
               rel="noopener noreferrer"
@@ -113,6 +122,29 @@ function WhatsAppIcon() {
   return (
     <svg viewBox="0 0 24 24" className="h-6 w-6 fill-current" aria-hidden>
       <path d="M12 2a10 10 0 0 0-8.6 15L2 22l5.2-1.4A10 10 0 1 0 12 2Zm5.5 14.1c-.2.6-1.2 1.2-1.7 1.2-.5.1-1 .1-1.6-.1-.4-.1-.9-.3-1.5-.6-2.6-1.1-4.3-3.8-4.4-4-.1-.2-1-1.4-1-2.6s.6-1.8.9-2.1c.2-.2.5-.3.6-.3h.5c.2 0 .4 0 .5.4l.8 1.8c.1.2 0 .4-.1.5l-.4.5c-.1.1-.3.3-.1.6.1.3.6 1.1 1.4 1.8 1 .8 1.7 1.1 2 1.2.2.1.4.1.6-.1l.7-.8c.2-.2.4-.2.6-.1l1.7.8c.2.1.4.2.4.3.1.2.1.7-.1 1.3Z" />
+    </svg>
+  );
+}
+
+
+/** TikTok's note-and-swoosh, in its two brand colours. */
+function TikTokIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-7 w-7" aria-hidden>
+      <path
+        fill="#25F4EE"
+        d="M15.6 2h-2.9v14.2a2.2 2.2 0 1 1-2.2-2.2c.2 0 .4 0 .6.1v-2.9a5.1 5.1 0 1 0 4.5 5V9a6.4 6.4 0 0 0 3.7 1.2V7.4a3.6 3.6 0 0 1-3.7-3.5V2Z"
+      />
+      <path
+        fill="#FE2C55"
+        d="M16.6 3h-2.9v14.2a2.2 2.2 0 1 1-2.2-2.2c.2 0 .4 0 .6.1v-2.9a5.1 5.1 0 1 0 4.5 5V10a6.4 6.4 0 0 0 3.7 1.2V8.4a3.6 3.6 0 0 1-3.7-3.5V3Z"
+        opacity=".9"
+      />
+      <path
+        fill="#fff"
+        d="M16.1 2.5h-2.9v14.2a2.2 2.2 0 1 1-2.2-2.2c.2 0 .4 0 .6.1v-2.9a5.1 5.1 0 1 0 4.5 5V9.5a6.4 6.4 0 0 0 3.7 1.2V7.9a3.6 3.6 0 0 1-3.7-3.5V2.5Z"
+        opacity=".92"
+      />
     </svg>
   );
 }

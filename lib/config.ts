@@ -19,12 +19,17 @@ export const SHOP = {
 export const SOCIALS = {
   instagram: {
     handle: "@kappa.bakes",
-    url: "https://instagram.com/kappa.bakes",
+    url: "https://www.instagram.com/kappa.bakes",
   },
   snapchat: {
-    /// TODO: put your real Snapchat username here
-    handle: "@kappabakes",
-    url: "https://snapchat.com/add/kappabakes",
+    handle: "@kappa.bakes",
+    /// The share link from the Snapchat app, which works whether or not
+    /// someone has the app installed.
+    url: "https://snapchat.com/t/xaIdrJtv",
+  },
+  tiktok: {
+    handle: "@kappa.bakes",
+    url: "https://www.tiktok.com/@kappa.bakes",
   },
   whatsapp: {
     /// International format, no plus. Empty string hides every WhatsApp link.
