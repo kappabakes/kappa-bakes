@@ -16,6 +16,7 @@ type Order = {
   totalPence: number;
   depositPence: number;
   status: "CONFIRMED" | "COLLECTED" | "CANCELLED";
+  requests: string | null;
   notes: string | null;
   emailStatus: string | null;
   smsStatus: string | null;
@@ -213,6 +214,12 @@ export function WholeOrders({
                 <strong>{money(balance)} due on collection</strong>
               </p>
 
+              {o.requests && (
+                <p className="mt-2 whitespace-pre-line rounded-btn border border-gold/40 bg-gold-light px-3 py-2 text-[13px] text-ink">
+                  <strong>Requests:</strong> {o.requests}
+                </p>
+              )}
+
               {o.notes && (
                 <p className="mt-2 whitespace-pre-line rounded-btn bg-cream-warm px-3 py-2 text-[13px] text-ink2">
                   {o.notes}
@@ -350,6 +357,7 @@ function WholeForm({
       : "14:00",
     total: order ? (order.totalPence / 100).toFixed(2) : "",
     deposit: order ? (order.depositPence / 100).toFixed(2) : "",
+    requests: order?.requests ?? "",
     notes: order?.notes ?? "",
   });
 
@@ -385,6 +393,7 @@ function WholeForm({
         items,
         totalPence: Math.round(parseFloat(f.total || "0") * 100),
         depositPence: Math.round(parseFloat(f.deposit || "0") * 100),
+        requests: f.requests,
         notes: f.notes,
         allergensDiscussed: allergens,
         depositTermsExplained: depositTerms,
@@ -552,6 +561,23 @@ function WholeForm({
             </strong>
           </p>
         )}
+
+        <label className="mt-4 block">
+          <span className="mb-1.5 block text-[13px] font-semibold text-ink">
+            Additional Info/Requests
+          </span>
+          <textarea
+            value={f.requests}
+            rows={3}
+            onChange={(e) => setF({ ...f, requests: e.target.value })}
+            placeholder="Anything they've asked for — a message on top, how it's sliced, a dietary note"
+            className="w-full rounded-btn border border-field bg-paper px-3.5 py-2.5 text-[15px] text-ink placeholder:text-muted"
+          />
+          <span className="mt-1 block text-[12px] text-muted">
+            Goes out in their confirmation. Leave empty and the section
+            doesn&apos;t appear at all.
+          </span>
+        </label>
 
         <label className="mt-4 block">
           <span className="mb-1.5 block text-[13px] font-semibold text-ink">

@@ -372,6 +372,10 @@ model WholeOrder {
   cancelNote   String?
   collectedAt  DateTime?
 
+  /// Anything the customer asked for — a message on top, a particular
+  /// slicing, a nut-free bake. Goes out in the confirmation, unlike notes.
+  requests String?
+  /// Yours only. Never sent.
   notes String?
 
   emailStatus    String?

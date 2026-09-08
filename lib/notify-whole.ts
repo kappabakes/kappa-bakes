@@ -12,7 +12,22 @@ export type WholePayload = {
   totalPence: number;
   depositPence: number;
   address: string[];
+  /// Shown in the confirmation, under the deposit note. Left out entirely
+  /// when empty rather than printing an empty heading.
+  requests?: string | null;
 };
+
+/**
+ * Anything a customer told you goes through here before it reaches the HTML.
+ * Without it, an ampersand or angle bracket in a request would break the
+ * email — and worse could be pasted in deliberately.
+ */
+const escapeHtml = (s: string) =>
+  s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 
 const siteUrl = () =>
   (process.env.NEXT_PUBLIC_SITE_URL ?? "").trim().replace(/\/+$/, "");
@@ -119,6 +134,13 @@ export function buildWholeEmail(p: WholePayload) {
             contactless card payment when you collect.
           </p>
 
+          ${
+            p.requests?.trim()
+              ? `<p style="margin:0 0 8px;font-size:13px;font-weight:bold;letter-spacing:.08em;color:#8a7a5c;">ADDITIONAL INFO/REQUESTS:</p>
+                 <p style="margin:0 0 24px;font-size:16px;line-height:1.5;white-space:pre-line;">${escapeHtml(p.requests.trim())}</p>`
+              : ""
+          }
+
           <p style="margin:0 0 8px;font-size:13px;font-weight:bold;letter-spacing:.08em;color:#8a7a5c;">COLLECTION ADDRESS:</p>
           ${p.address
             .map(
@@ -170,6 +192,9 @@ export function buildWholeEmail(p: WholePayload) {
     "",
     "Your deposit is non-refundable. The remaining balance is taken by contactless card payment when you collect.",
     "",
+    ...(p.requests?.trim()
+      ? ["ADDITIONAL INFO/REQUESTS:", p.requests.trim(), ""]
+      : []),
     "COLLECTION ADDRESS:",
     ...p.address,
     "",

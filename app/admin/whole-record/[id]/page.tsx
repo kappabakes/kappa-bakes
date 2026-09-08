@@ -15,6 +15,7 @@ type Record = {
     totalPence: number;
     depositPence: number;
     status: string;
+    requests: string | null;
     notes: string | null;
     allergensDiscussedAt: string | null;
     allergenText: string | null;
@@ -123,6 +124,18 @@ export default function WholeRecord({ params }: { params: { id: string } }) {
             }
           />
           {o.cancelNote && <p className="mt-1">{o.cancelNote}</p>}
+        </>
+      )}
+
+      {o.requests && (
+        <>
+          <h2 className="mt-6 text-[15px] font-bold">
+            Additional Info/Requests
+          </h2>
+          <p className="whitespace-pre-line">{o.requests}</p>
+          <p className="mt-1 text-[12px] text-neutral-600">
+            Included in the confirmation sent to the customer.
+          </p>
         </>
       )}
 

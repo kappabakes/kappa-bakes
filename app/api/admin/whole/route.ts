@@ -75,6 +75,7 @@ export async function POST(req: Request) {
     items: WholeItem[];
     totalPence: number;
     depositPence: number;
+    requests?: string;
     notes?: string;
     allergensDiscussed?: boolean;
     depositTermsExplained?: boolean;
@@ -115,6 +116,7 @@ export async function POST(req: Request) {
     items: items as unknown as object,
     totalPence: Math.max(0, Math.round(b.totalPence)),
     depositPence: Math.max(0, Math.round(b.depositPence)),
+    requests: b.requests?.trim() || null,
     notes: b.notes?.trim() || null,
     ...(b.allergensDiscussed
       ? { allergensDiscussedAt: new Date(), allergenText: ALLERGEN_NOTICE }
@@ -140,6 +142,7 @@ export async function POST(req: Request) {
       items: order.items as unknown as WholeItem[],
       totalPence: order.totalPence,
       depositPence: order.depositPence,
+      requests: order.requests,
       address: await collectionAddress(),
     });
 
