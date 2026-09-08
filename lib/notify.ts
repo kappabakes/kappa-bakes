@@ -127,9 +127,11 @@ export function buildEmail(p: Payload, updated = false) {
       para(`Your order <strong>${p.orderNo}</strong> ${verb}.`),
 
       heading("YOUR ORDER"),
+      // The count reads as a heading for the lines beneath it, not as a
+      // footnote — it's the first thing someone checks.
       para(
         `${p.slices.length} slice${p.slices.length === 1 ? "" : "s"}`,
-        "margin-bottom:6px;color:#5b6b7f;font-size:14px;"
+        "margin-bottom:8px;font-size:18px;font-weight:bold;"
       ),
       lines.map((l) => para(l, "margin-bottom:4px;")).join(""),
 
