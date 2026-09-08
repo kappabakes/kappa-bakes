@@ -33,6 +33,7 @@ type Record = {
 const stamp = (iso: string | null) =>
   iso
     ? new Date(iso).toLocaleString("en-GB", {
+        timeZone: "Europe/London",
         day: "2-digit",
         month: "2-digit",
         year: "numeric",

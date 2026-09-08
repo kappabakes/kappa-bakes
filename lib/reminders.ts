@@ -82,11 +82,19 @@ export async function sendWholeReminders(forDay?: Date) {
   const { notifyWhole } = await import("./notify-whole");
   const { WholeStatus } = await import("@prisma/client");
 
-  const day = forDay ?? new Date();
-  const start = new Date(day);
-  start.setUTCHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + 1);
+  /*
+   * "Today" in UK terms. An order at 00:30 BST is still 23:30 UTC the day
+   * before, so a UTC-based window would email the wrong people either side
+   * of midnight.
+   */
+  const { ukWallTimeToUtc } = await import("./whole");
+  const now = forDay ?? new Date();
+  const todayUk = now.toLocaleDateString("en-CA", {
+    timeZone: "Europe/London",
+  }); // YYYY-MM-DD
+
+  const start = ukWallTimeToUtc(todayUk, "00:00");
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
 
   const orders = await db.wholeOrder.findMany({
     where: {
