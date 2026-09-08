@@ -7,6 +7,7 @@ import { SHOP } from "@/lib/config";
 export type Section =
   | "dashboard"
   | "orders"
+  | "whole"
   | "menu"
   | "customers"
   | "dates"
@@ -17,6 +18,12 @@ export type Section =
 const NAV: { id: Section; label: string; note: string; icon: string }[] = [
   { id: "dashboard", label: "Dashboard", note: "Today at a glance", icon: "▦" },
   { id: "orders", label: "Orders", note: "View & manage orders", icon: "🛍" },
+  {
+    id: "whole",
+    label: "Whole Cheesecakes",
+    note: "Full orders, taken by hand",
+    icon: "🎂",
+  },
   { id: "menu", label: "Menu", note: "Flavours & allergens", icon: "🍰" },
   { id: "customers", label: "Customers", note: "Who's ordered before", icon: "👥" },
   { id: "dates", label: "Collection Dates", note: "Dates, times & cut-offs", icon: "📅" },

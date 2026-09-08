@@ -330,3 +330,68 @@ model Counter {
   id    Int @id @default(1)
   value Int @default(0)
 }
+
+
+/// A whole-cheesecake order.
+///
+/// Deliberately its own table rather than a flag on Order. The two share
+/// almost nothing: no order number, no slice stock, no collection-date
+/// capacity, no no-show policy, a deposit instead of full payment, and an
+/// arbitrary collection time rather than a published window. Keeping them
+/// apart means neither can break the other.
+model WholeOrder {
+  id        String @id @default(cuid())
+  firstName String
+  lastName  String
+  email     String
+  mobile    String
+
+  /// Date and time they're collecting. Any date — not tied to the slice
+  /// collection days.
+  collectAt DateTime
+
+  /// The cakes. See lib/whole.ts for the shape.
+  items Json
+
+  totalPence   Int
+  depositPence Int
+
+  status WholeStatus @default(CONFIRMED)
+
+  /// Recorded when you take the order, the same as a customer ticking it.
+  allergensDiscussedAt DateTime?
+  allergenText         String?
+
+  /// That you told them the deposit isn't refundable. A verbal agreement
+  /// with a timestamp is worth having if it's ever disputed.
+  depositTermsAt   DateTime?
+  depositTermsText String?
+
+  cancelledAt  DateTime?
+  cancelReason String?
+  cancelNote   String?
+  collectedAt  DateTime?
+
+  /// Anything the customer asked for — a message on top, a particular
+  /// slicing, a nut-free bake. Goes out in the confirmation, unlike notes.
+  requests String?
+  /// Yours only. Never sent.
+  notes String?
+
+  emailStatus    String?
+  smsStatus      String?
+  confirmSentAt  DateTime?
+  reminderSentAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([collectAt])
+  @@index([status])
+}
+
+enum WholeStatus {
+  CONFIRMED
+  COLLECTED
+  CANCELLED
+}

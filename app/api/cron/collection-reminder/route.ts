@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { sendReminders } from "@/lib/reminders";
+import { sendReminders, sendWholeReminders } from "@/lib/reminders";
 
 export const dynamic = "force-dynamic";
 
@@ -14,5 +14,12 @@ export async function GET(req: Request) {
   if (!manual && auth !== `Bearer ${process.env.CRON_SECRET}`)
     return new NextResponse("Nope", { status: 401 });
 
-  return NextResponse.json(await sendReminders());
+  // Slices and whole cakes are separate lines with separate emails, but
+  // they both go out on the morning of collection.
+  const [slices, whole] = await Promise.all([
+    sendReminders(),
+    sendWholeReminders(),
+  ]);
+
+  return NextResponse.json({ slices, whole });
 }

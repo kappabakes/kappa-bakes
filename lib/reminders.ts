@@ -34,7 +34,7 @@ export async function sendReminders(forDay?: Date) {
   let failed = 0;
 
   for (const order of orders) {
-    const { subject, body } = buildReminderEmail(
+    const { subject, body, html } = buildReminderEmail(
       {
         orderNo: order.orderNo,
         firstName: order.firstName,
@@ -49,7 +49,7 @@ export async function sendReminders(forDay?: Date) {
       address
     );
 
-    const status = await sendEmail(order.email, subject, body);
+    const status = await sendEmail(order.email, subject, body, html);
     if (status === "Sent" || status.startsWith("Skipped")) sent++;
     else failed++;
 
@@ -68,4 +68,62 @@ export async function sendReminders(forDay?: Date) {
   }
 
   return { sent, failed, total: orders.length };
+}
+
+
+/**
+ * Whole-cheesecake reminders, on the morning of collection.
+ *
+ * Separate from the slice reminder above: these have their own email, their
+ * own times, and no collection window to belong to.
+ */
+export async function sendWholeReminders(forDay?: Date) {
+  const { collectionAddress } = await import("./settings");
+  const { notifyWhole } = await import("./notify-whole");
+  const { WholeStatus } = await import("@prisma/client");
+
+  const day = forDay ?? new Date();
+  const start = new Date(day);
+  start.setUTCHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 1);
+
+  const orders = await db.wholeOrder.findMany({
+    where: {
+      collectAt: { gte: start, lt: end },
+      status: WholeStatus.CONFIRMED,
+      reminderSentAt: null,
+    },
+  });
+
+  if (!orders.length) return { sent: 0, reason: "Nothing collecting today" };
+
+  const address = await collectionAddress();
+  let sent = 0;
+
+  for (const o of orders) {
+    const { emailStatus } = await notifyWhole(
+      {
+        firstName: o.firstName,
+        lastName: o.lastName,
+        email: o.email,
+        mobile: o.mobile,
+        collectAt: o.collectAt,
+        items: o.items as never,
+        totalPence: o.totalPence,
+        depositPence: o.depositPence,
+        address,
+      },
+      true
+    );
+
+    await db.wholeOrder.update({
+      where: { id: o.id },
+      data: { reminderSentAt: new Date() },
+    });
+
+    if (emailStatus === "Sent") sent++;
+  }
+
+  return { sent, of: orders.length };
 }

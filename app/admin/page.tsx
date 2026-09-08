@@ -5,6 +5,7 @@ import { SHOP } from "@/lib/config";
 import { Shell, Section } from "./Shell";
 import { Dashboard } from "./Dashboard";
 import { Orders } from "./Orders";
+import { WholeOrders } from "./WholeOrders";
 import { MenuManager } from "./Menu";
 import { DaysManager } from "./Days";
 import { Archive } from "./Archive";
@@ -263,10 +264,20 @@ export default function Admin() {
         <Dashboard go={(s) => setSection(s)} />
       )}
       {section === "orders" && <Orders flash={flash} />}
+      {section === "whole" && <WholeOrders flash={flash} />}
       {section === "menu" && <MenuManager flash={flash} />}
       {section === "dates" && <DaysManager flash={flash} />}
       {section === "customers" && <Customers flash={flash} />}
-      {section === "archive" && <Archive flash={flash} />}
+      {section === "archive" && (
+        <>
+          <Archive flash={flash} />
+          {/* Whole cheesecakes archive separately: one long list, no
+              collection dates to group by. */}
+          <div className="mt-10 border-t border-line pt-8">
+            <WholeOrders archive flash={flash} />
+          </div>
+        </>
+      )}
       {section === "broadcast" && (
         <>
           <PageHead
