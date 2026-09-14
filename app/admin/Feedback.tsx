@@ -66,7 +66,9 @@ export function Feedback({ flash }: { flash: (m: string) => void }) {
     for (const f of row.flavours)
       byFlavour.set(f, [...(byFlavour.get(f) ?? []), row]);
 
-  const comments = rows.filter((r) => r.comment);
+  // Every response, not only the ones with something written. A rating on
+  // its own is still a response, and still worth being able to remove.
+  const responses = rows;
 
   return (
     <>
@@ -150,11 +152,11 @@ export function Feedback({ flash }: { flash: (m: string) => void }) {
         </Card>
       )}
 
-      {comments.length > 0 && (
+      {responses.length > 0 && (
         <Card className="mt-5">
-          <h2 className="font-display text-xl text-ink">Comments</h2>
+          <h2 className="font-display text-xl text-ink">Responses</h2>
           <ul className="mt-3 space-y-2">
-            {comments.map((c) => {
+            {responses.map((c) => {
               const r = RATINGS.find((x) => x.value === c.rating);
               return (
                 <li
@@ -171,14 +173,56 @@ export function Feedback({ flash }: { flash: (m: string) => void }) {
                     })}
                     {c.kind === "WHOLE" && " · whole cake"}
                   </p>
-                  <p className="mt-1 whitespace-pre-line text-[15px] text-ink">
-                    {c.comment}
-                  </p>
+                  {c.comment ? (
+                    <p className="mt-1 whitespace-pre-line text-[15px] text-ink">
+                      {c.comment}
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-[15px] italic text-muted">
+                      No comment provided
+                    </p>
+                  )}
+                  <button
+                    onClick={async () => {
+                      if (!confirm("Delete this response?")) return;
+                      const r = await fetch(`/api/admin/feedback?id=${c.id}`, {
+                        method: "DELETE",
+                      });
+                      if (!r.ok) return flash(await readError(r));
+                      flash("Deleted");
+                      load();
+                    }}
+                    className="mt-2 text-[12px] font-semibold text-bad underline underline-offset-4"
+                  >
+                    Delete
+                  </button>
                 </li>
               );
             })}
           </ul>
         </Card>
+      )}
+
+      {rows.length > 0 && (
+        <p className="mt-6 text-center">
+          <button
+            onClick={async () => {
+              if (
+                !confirm(
+                  "Delete every response?\n\nThis also lets those orders be surveyed again, so you can test the flow from the start. Only works while TEST_MODE is on."
+                )
+              )
+                return;
+              const r = await fetch("/api/admin/feedback", { method: "PUT" });
+              const d = await r.json();
+              flash(r.ok ? `${d.deleted} deleted` : (d.error ?? "Couldn't clear."));
+              load();
+            }}
+            className="text-[12px] text-muted underline underline-offset-4 hover:text-bad"
+          >
+            Clear all feedback
+          </button>
+        </p>
       )}
 
       {rows.length === 0 && (
