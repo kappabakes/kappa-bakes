@@ -101,13 +101,17 @@ function Feedback() {
           </p>
 
           {happy ? (
-            <div className="mt-6 rounded-card bg-navy p-5 text-white">
-              <p className="font-semibold">One more thing?</p>
-              <p className="mt-1.5 text-[14px] leading-relaxed text-white/80">
-                A Social Media post/story helps more than you&apos;d think.
-                Please support your local baker and help me reach more
-                customers. Your efforts are very much appreciated : )
-              </p>
+            <div className="mt-6 rounded-card bg-navy p-5">
+              <p className="font-semibold text-white">One more thing</p>
+
+              <div className="mt-3 rounded-card bg-gold-light px-4 py-3.5">
+                <p className="text-[14px] leading-relaxed text-ink">
+                  A Social Media post/story helps more than you&apos;d think.
+                  Please support your local baker and help me reach more
+                  customers. Your efforts are very much appreciated : )
+                </p>
+              </div>
+
               <div className="mt-4 flex flex-wrap justify-center gap-2">
                 {reviewLink && (
                   <a
@@ -187,11 +191,27 @@ function Feedback() {
         <h1 className="font-display text-3xl text-ink">
           {happy ? "Thank you" : "Sorry to hear that"}
         </h1>
-        <p className="mt-2 text-[15px] leading-relaxed text-ink2">
-          {happy
-            ? "Your response has been recorded. Just one last step if you have a minute. All feedback is valuable and would be much appreciated if you could fill out the below. Positive and constructive feedback are both welcome. Your response is anonymous so please feel comfortable to express yourself."
-            : "Tell us what went wrong — it's the useful kind of feedback."}
-        </p>
+        {happy ? (
+          <div className="mt-2 space-y-1.5 text-[15px] leading-relaxed text-ink2">
+            <p>
+              Your response has been recorded. Just one last step if you have a
+              minute.
+            </p>
+            <p>
+              All feedback is valuable and would be much appreciated if you
+              could fill out the below.
+            </p>
+            <p>Positive and constructive feedback are both welcome.</p>
+            <p>
+              Your response is anonymous so please feel comfortable to express
+              yourself.
+            </p>
+          </div>
+        ) : (
+          <p className="mt-2 text-[15px] leading-relaxed text-ink2">
+            Tell us what went wrong — it&apos;s the useful kind of feedback.
+          </p>
+        )}
 
         {flavours.length > 1 && (
           <>
@@ -252,13 +272,19 @@ function Feedback() {
         </button>
 
         {happy ? (
-          <div className="mt-6 rounded-card bg-navy p-5 text-center text-white">
-            <p className="font-semibold">Glad you enjoyed it</p>
-            <p className="mt-1.5 text-[14px] leading-relaxed text-white/80">
-              A Social Media post/story helps more than you&apos;d think.
-              Please support your local baker and help me reach more customers.
-              Your efforts are very much appreciated : )
-            </p>
+          <div className="mt-6 rounded-card bg-navy p-5 text-center">
+            <p className="font-semibold text-white">Glad you enjoyed it</p>
+
+            {/* The message sits on cream inside the navy, so the panel reads
+                as a card rather than a block of blue. */}
+            <div className="mt-3 rounded-card bg-gold-light px-4 py-3.5">
+              <p className="text-[14px] leading-relaxed text-ink">
+                A Social Media post/story helps more than you&apos;d think.
+                Please support your local baker and help me reach more
+                customers. Your efforts are very much appreciated : )
+              </p>
+            </div>
+
             <div className="mt-4 flex flex-wrap justify-center gap-2">
               {reviewLink && (
                 <a
