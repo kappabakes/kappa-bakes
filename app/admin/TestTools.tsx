@@ -154,7 +154,17 @@ export function TestTools({ flash }: { flash: (m: string) => void }) {
 
         <button
           onClick={async () => {
-            const r = await fetch("/api/cron/prep?manual=true");
+            // Normally it looks two days ahead. For testing you almost always
+            // want a date you've actually got orders on.
+            const date = prompt(
+              "Which collection date? (YYYY-MM-DD)\n\nLeave blank for two days from now, which is what the scheduled one uses.",
+              ""
+            );
+            if (date === null) return;
+
+            const r = await fetch(
+              `/api/cron/prep?manual=true${date ? `&date=${date}` : ""}`
+            );
             const d = await r.json();
             flash(
               r.ok

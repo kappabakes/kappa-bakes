@@ -83,14 +83,33 @@ export async function GET(req: Request) {
         status: OrderStatus.COLLECTED,
       },
     });
-    const wholeOnDate = await db.wholeOrder.count({
-      where: { collectAt: { gte: start, lt: end } },
-    });
+    // Whole orders were the omission last time: reporting the slice count
+    // only sends you looking in the wrong place.
+    const [wholeOnDate, wholeCollected, wholeAlreadyAsked, sliceAlreadyAsked] =
+      await Promise.all([
+        db.wholeOrder.count({ where: { collectAt: { gte: start, lt: end } } }),
+        db.wholeOrder.count({
+          where: {
+            collectAt: { gte: start, lt: end },
+            status: WholeStatus.COLLECTED,
+          },
+        }),
+        db.wholeOrder.count({
+          where: {
+            collectAt: { gte: start, lt: end },
+            surveySentAt: { not: null },
+          },
+        }),
+        db.order.count({
+          where: { day: { gte: start, lt: end }, surveySentAt: { not: null } },
+        }),
+      ]);
 
     why =
-      `${onDate} slice order(s) and ${wholeOnDate} whole order(s) on ${yesterdayUk}. ` +
-      `${collected} slice order(s) marked collected. ` +
-      `Only collected orders are asked, and each is only asked once.`;
+      `On ${yesterdayUk}: ` +
+      `slices — ${onDate} order(s), ${collected} collected, ${sliceAlreadyAsked} already asked. ` +
+      `Whole cakes — ${wholeOnDate} order(s), ${wholeCollected} collected, ${wholeAlreadyAsked} already asked. ` +
+      `Only collected orders are asked, and only once each.`;
   }
 
   return NextResponse.json({
