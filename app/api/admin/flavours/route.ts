@@ -93,13 +93,24 @@ export async function POST(req: Request) {
     toppingIds: b.toppingIds ?? [],
     maxSauces: Math.max(1, Math.floor(Number(b.maxSauces) || 1)),
     maxToppings: Math.max(1, Math.floor(Number(b.maxToppings) || 2)),
-    active: b.active ?? true,
     sortOrder: b.sortOrder ?? 0,
   };
 
+  /*
+   * Whether it's on the menu is only decided here when creating, or when the
+   * caller says so explicitly. The editor doesn't send it — so defaulting it
+   * on an update silently unarchived any archived flavour you edited, which
+   * looked like it had vanished.
+   */
   const flavour = b.id
-    ? await db.flavour.update({ where: { id: b.id }, data })
-    : await db.flavour.create({ data });
+    ? await db.flavour.update({
+        where: { id: b.id },
+        data: {
+          ...data,
+          ...(b.active === undefined ? {} : { active: b.active }),
+        },
+      })
+    : await db.flavour.create({ data: { ...data, active: b.active ?? true } });
 
   // Replace the date list wholesale: what you saved is what it's offered on.
   if (b.dateStock) {

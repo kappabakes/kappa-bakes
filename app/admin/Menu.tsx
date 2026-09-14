@@ -191,7 +191,12 @@ export function MenuManager({ flash }: { flash: (m: string) => void }) {
         maxSauces: Number(draft.maxSauces) || 1,
         maxToppings: Number(draft.maxToppings) || 2,
         sortOrder: Number(draft.sortOrder) || 0,
-        active: true,
+        /*
+         * Only on create. Sending it on an update unarchived any archived
+         * flavour you edited — which looked like it had disappeared, when it
+         * had actually jumped back onto the live menu.
+         */
+        ...(editing === "new" ? { active: true } : {}),
       }),
     });
     if (!r.ok) return flash(await readError(r));
