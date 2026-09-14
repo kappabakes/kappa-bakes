@@ -153,6 +153,32 @@ export function TestTools({ flash }: { flash: (m: string) => void }) {
         </button>
 
         <button
+          onClick={async () => {
+            // Normally it looks two days ahead. For testing you almost always
+            // want a date you've actually got orders on.
+            const date = prompt(
+              "Which collection date? (YYYY-MM-DD)\n\nLeave blank for two days from now, which is what the scheduled one uses.",
+              ""
+            );
+            if (date === null) return;
+
+            const r = await fetch(
+              `/api/cron/prep?manual=true${date ? `&date=${date}` : ""}`
+            );
+            const d = await r.json();
+            flash(
+              r.ok
+                ? d.reason ??
+                    `Sent to ${d.sent}: ${d.slices} slices, ${d.wholes} whole`
+                : "Couldn't send the prep email."
+            );
+          }}
+          className="rounded-btn border border-navy bg-paper px-3 py-1.5 text-xs font-semibold text-navy transition-colors hover:bg-cream-beige"
+        >
+          Send prep email now
+        </button>
+
+        <button
           onClick={wipe}
           disabled={busy || count === 0}
           className="ml-auto border border-bad px-3 py-1.5 text-xs text-bad disabled:opacity-30"

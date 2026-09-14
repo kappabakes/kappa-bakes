@@ -10,6 +10,7 @@ export type Section =
   | "whole"
   | "menu"
   | "customers"
+  | "feedback"
   | "dates"
   | "archive"
   | "broadcast"
@@ -26,6 +27,12 @@ const NAV: { id: Section; label: string; note: string; icon: string }[] = [
   },
   { id: "menu", label: "Menu", note: "Flavours & allergens", icon: "🍰" },
   { id: "customers", label: "Customers", note: "Who's ordered before", icon: "👥" },
+  {
+    id: "feedback",
+    label: "Feedback",
+    note: "Anonymous customer replies",
+    icon: "💬",
+  },
   { id: "dates", label: "Collection Dates", note: "Dates, times & cut-offs", icon: "📅" },
   { id: "archive", label: "Archive", note: "Past collections", icon: "🗄" },
   { id: "broadcast", label: "Broadcasts", note: "Email your customers", icon: "📣" },

@@ -10,6 +10,7 @@ import { MenuManager } from "./Menu";
 import { DaysManager } from "./Days";
 import { Archive } from "./Archive";
 import { Customers } from "./Customers";
+import { Feedback } from "./Feedback";
 import { Campaigns } from "./Campaigns";
 import { Passkeys } from "./Passkeys";
 import { TestTools } from "./TestTools";
@@ -268,6 +269,7 @@ export default function Admin() {
       {section === "menu" && <MenuManager flash={flash} />}
       {section === "dates" && <DaysManager flash={flash} />}
       {section === "customers" && <Customers flash={flash} />}
+      {section === "feedback" && <Feedback flash={flash} />}
       {section === "archive" && (
         <>
           <Archive flash={flash} />

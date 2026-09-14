@@ -13,18 +13,33 @@ export type WholeItem = {
   /// The second half. Only when kind is HALF.
   flavourB?: string;
   qty: number;
+  /// The allergens for these flavours as they were when the order was taken.
+  /// Copied in rather than looked up later, so editing a flavour can't
+  /// rewrite what a customer was told.
+  allergens?: string[];
 };
 
 /** Alphabetical, so a pairing always reads and stores the same way. */
 export function normaliseItem(item: WholeItem): WholeItem {
   if (item.kind !== "HALF" || !item.flavourB) {
-    return { kind: "WHOLE", flavour: item.flavour, qty: Math.max(1, item.qty) };
+    return {
+      kind: "WHOLE",
+      flavour: item.flavour,
+      qty: Math.max(1, item.qty),
+      allergens: item.allergens,
+    };
   }
 
   const [a, b] = [item.flavour, item.flavourB].sort((x, y) =>
     x.localeCompare(y)
   );
-  return { kind: "HALF", flavour: a, flavourB: b, qty: Math.max(1, item.qty) };
+  return {
+    kind: "HALF",
+    flavour: a,
+    flavourB: b,
+    qty: Math.max(1, item.qty),
+    allergens: item.allergens,
+  };
 }
 
 /** "Berry Bliss (whole)" or "Half Berry Bliss / Half Special K". */

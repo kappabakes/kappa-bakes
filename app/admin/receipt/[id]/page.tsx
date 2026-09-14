@@ -27,7 +27,11 @@ type Receipt = {
     ipAddress: string | null;
     userAgent: string | null;
   };
-  allergens: { acceptedAt: string | null; text: string | null };
+  allergens: {
+    acceptedAt: string | null;
+    text: string | null;
+    byFlavour: { flavour: string; allergens: string[] }[];
+  };
   cancellation: {
     at: string;
     reason: string | null;
@@ -167,6 +171,23 @@ export default function ReceiptPage() {
           <p className="mt-1.5 text-[12px]">
             Accepted at {stamp(r.allergens?.acceptedAt ?? null)}
           </p>
+
+          {/* As listed when the order was placed. A later edit to a flavour
+              can't change what this record says. */}
+          {r.allergens?.byFlavour?.length > 0 && (
+            <div className="mt-2 border-t border-neutral-300 pt-2">
+              <p className="text-[12px] font-semibold">
+                Allergens shown for the flavours ordered:
+              </p>
+              {r.allergens.byFlavour.map((f) => (
+                <p key={f.flavour} className="text-[12px]">
+                  <span className="font-semibold">{f.flavour}</span>
+                  {" — "}
+                  {f.allergens.length ? f.allergens.join(", ") : "none listed"}
+                </p>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="mt-3 border border-black p-3">

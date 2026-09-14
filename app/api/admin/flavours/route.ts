@@ -52,6 +52,7 @@ export async function POST(req: Request) {
     stockPerDay?: number | null;
     serving?: "CHOICE" | "ON_SLICE" | "IN_TUB";
     selectedDatesOnly?: boolean;
+    wholeAvailable?: boolean;
     /// Which dates it's offered on, and how many. Only sent when the flavour
     /// is limited to selected dates.
     dateStock?: { iso: string; stock: number }[];
@@ -86,6 +87,7 @@ export async function POST(req: Request) {
         : null,
     serving: b.serving ?? "CHOICE",
     selectedDatesOnly: b.selectedDatesOnly ?? false,
+    wholeAvailable: b.wholeAvailable ?? true,
     hasExtraSauce: b.hasExtraSauce ?? true,
     sauceIds: b.sauceIds ?? [],
     toppingIds: b.toppingIds ?? [],

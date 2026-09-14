@@ -11,6 +11,14 @@
     {
       "path": "/api/cron/collection-reminder",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/survey",
+      "schedule": "0 11 * * *"
+    },
+    {
+      "path": "/api/cron/prep",
+      "schedule": "0 6,7 * * *"
     }
   ]
 }
