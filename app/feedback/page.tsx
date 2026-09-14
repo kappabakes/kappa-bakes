@@ -108,7 +108,7 @@ function Feedback() {
                 <p className="text-[14px] leading-relaxed text-ink">
                   A Social Media post/story helps more than you&apos;d think.
                   Please support your local baker and help me reach more
-                  customers. Your efforts are very much appreciated : )
+                  customers. Your efforts are very much appreciated 😁
                 </p>
               </div>
 
@@ -281,7 +281,7 @@ function Feedback() {
               <p className="text-[14px] leading-relaxed text-ink">
                 A Social Media post/story helps more than you&apos;d think.
                 Please support your local baker and help me reach more
-                customers. Your efforts are very much appreciated : )
+                customers. Your efforts are very much appreciated 😁
               </p>
             </div>
 
