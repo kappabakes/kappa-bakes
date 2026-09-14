@@ -104,8 +104,9 @@ function Feedback() {
             <div className="mt-6 rounded-card bg-navy p-5 text-white">
               <p className="font-semibold">One more thing?</p>
               <p className="mt-1.5 text-[14px] leading-relaxed text-white/80">
-                A review helps more than you'd think. These aren't anonymous —
-                you'd be messaging or posting as yourself.
+                A Social Media post/story helps more than you&apos;d think.
+                Please support your local baker and help me reach more
+                customers. Your efforts are very much appreciated : )
               </p>
               <div className="mt-4 flex flex-wrap justify-center gap-2">
                 {reviewLink && (
@@ -188,7 +189,7 @@ function Feedback() {
         </h1>
         <p className="mt-2 text-[15px] leading-relaxed text-ink2">
           {happy
-            ? "That's recorded. Two quick things if you've a minute."
+            ? "Your response has been recorded. Just one last step if you have a minute. All feedback is valuable and would be much appreciated if you could fill out the below. Positive and constructive feedback are both welcome. Your response is anonymous so please feel comfortable to express yourself."
             : "Tell us what went wrong — it's the useful kind of feedback."}
         </p>
 
@@ -254,8 +255,9 @@ function Feedback() {
           <div className="mt-6 rounded-card bg-navy p-5 text-center text-white">
             <p className="font-semibold">Glad you enjoyed it</p>
             <p className="mt-1.5 text-[14px] leading-relaxed text-white/80">
-              A review helps more than you'd think. These aren't anonymous —
-              you'd be messaging or posting as yourself.
+              A Social Media post/story helps more than you&apos;d think.
+              Please support your local baker and help me reach more customers.
+              Your efforts are very much appreciated : )
             </p>
             <div className="mt-4 flex flex-wrap justify-center gap-2">
               {reviewLink && (
