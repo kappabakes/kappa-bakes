@@ -60,7 +60,13 @@ export function buildSurveyEmail(firstName: string, token: string) {
     SHOP.name,
   ].join("\n");
 
-  return { subject: "How was it? One tap, anonymous", html, text };
+  // Leads with the name, so it reads as a real business rather than a
+  // marketing blast someone deletes unread.
+  return {
+    subject: `${SHOP.name}: How was your recent order?`,
+    html,
+    text,
+  };
 }
 
 export async function sendSurveyEmail(

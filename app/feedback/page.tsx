@@ -79,22 +79,106 @@ function Feedback() {
       </main>
     );
 
-  if (state === "done")
-    return (
-      <main className="mx-auto max-w-lg p-10 text-center">
-        <h1 className="font-display text-3xl text-ink">Thank you</h1>
-        <p className="mt-3 text-[15px] text-ink2">
-          That's recorded — anonymously. It genuinely helps.
-        </p>
-      </main>
-    );
-
   const wa = whatsappLink();
   const reviewLink = wa
     ? `${wa}${wa.includes("?") ? "&" : "?"}text=${encodeURIComponent(
         "Hi, I'd like to leave a review for Kappa Bakes."
       )}`
     : null;
+
+  /*
+   * The thank-you screen keeps the same invitations rather than ending flat.
+   * Someone who's just told you they loved it is at the most willing they'll
+   * ever be — that's the moment to ask, not the one before.
+   */
+  if (state === "done")
+    return (
+      <main className="mx-auto max-w-lg px-5 py-10">
+        <div className="rounded-card bg-paper p-7 text-center shadow-soft">
+          <h1 className="font-display text-3xl text-ink">Thank you</h1>
+          <p className="mt-3 text-[15px] leading-relaxed text-ink2">
+            That's recorded — anonymously. It genuinely helps.
+          </p>
+
+          {happy ? (
+            <div className="mt-6 rounded-card bg-navy p-5 text-white">
+              <p className="font-semibold">One more thing?</p>
+              <p className="mt-1.5 text-[14px] leading-relaxed text-white/80">
+                A review helps more than you'd think. These aren't anonymous —
+                you'd be messaging or posting as yourself.
+              </p>
+              <div className="mt-4 flex flex-wrap justify-center gap-2">
+                {reviewLink && (
+                  <a
+                    href={reviewLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rounded-btn bg-good px-5 py-2.5 text-sm font-semibold text-white"
+                  >
+                    Message your review
+                  </a>
+                )}
+                <a
+                  href={SOCIALS.instagram.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-btn bg-white px-5 py-2.5 text-sm font-semibold text-navy"
+                >
+                  Tag us on Instagram
+                </a>
+              </div>
+              <p className="mt-3 text-[12px] text-white/60">
+                Instagram opens our profile — tag us in your post or story.
+              </p>
+            </div>
+          ) : (
+            wa && (
+              <div className="mt-6 rounded-card border border-bad/30 bg-bad-light p-5">
+                <p className="text-[15px] leading-relaxed text-ink">
+                  If you'd like it put right, message us — we can't reply to an
+                  anonymous answer.
+                </p>
+                <a
+                  href={wa}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-4 inline-block rounded-btn bg-good px-5 py-2.5 text-sm font-semibold text-white"
+                >
+                  Message us on WhatsApp
+                </a>
+              </div>
+            )
+          )}
+
+          <div className="mt-6 flex flex-wrap justify-center gap-3 border-t border-line pt-5">
+            <a
+              href={SOCIALS.instagram.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[13px] font-semibold text-gold-hover underline underline-offset-4"
+            >
+              Instagram
+            </a>
+            <a
+              href={SOCIALS.tiktok.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[13px] font-semibold text-gold-hover underline underline-offset-4"
+            >
+              TikTok
+            </a>
+            <a
+              href={SOCIALS.snapchat.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[13px] font-semibold text-gold-hover underline underline-offset-4"
+            >
+              Snapchat
+            </a>
+          </div>
+        </div>
+      </main>
+    );
 
   return (
     <main className="mx-auto max-w-lg px-5 py-10">
