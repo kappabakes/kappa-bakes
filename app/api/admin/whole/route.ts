@@ -95,7 +95,32 @@ export async function POST(req: Request) {
       { status: 400 }
     );
 
-  const items = (b.items ?? []).filter((i) => i.flavour).map(normaliseItem);
+  const clean = (b.items ?? []).filter((i) => i.flavour).map(normaliseItem);
+
+  /*
+   * Snapshot the allergens now. A flavour's list can be edited later, and a
+   * record that followed those edits would prove nothing — the point is what
+   * the customer was told on the day.
+   */
+  const named = [
+    ...new Set(clean.flatMap((i) => [i.flavour, i.flavourB].filter(Boolean))),
+  ] as string[];
+
+  const flavourRows = await db.flavour.findMany({
+    where: { name: { in: named } },
+    select: { name: true, allergens: true },
+  });
+  const allergensFor = new Map(flavourRows.map((f) => [f.name, f.allergens]));
+
+  const items = clean.map((i) => ({
+    ...i,
+    allergens: [
+      ...new Set([
+        ...(allergensFor.get(i.flavour) ?? []),
+        ...(i.flavourB ? (allergensFor.get(i.flavourB) ?? []) : []),
+      ]),
+    ].sort(),
+  }));
   if (!items.length)
     return NextResponse.json(
       { error: "Add at least one cheesecake." },

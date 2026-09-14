@@ -81,6 +81,9 @@ model Flavour {
   /// other dates, rather than appearing sold out.
   selectedDatesOnly Boolean @default(false)
   /// How toppings and sauces are served on this flavour.
+  /// Offered for whole-cheesecake orders. Separate from `active`, which
+  /// governs the slice menu.
+  wholeAvailable Boolean @default(true)
   serving ServingMode @default(CHOICE)
   /// Whether "extra sauce" is offered. Only meaningful on a flavour that
   /// comes with a sauce already.
@@ -208,6 +211,14 @@ model Order {
   emailStatus   String?
   /// Collection-morning reminder. Set once so a rerun can't send it twice.
   reminderSentAt DateTime?
+
+  /// The survey. `surveyToken` goes in the email link; `surveyResponded` is
+  /// deliberately a plain true/false rather than a timestamp, because a
+  /// timestamp could be matched against when a Feedback row was created and
+  /// would undo the anonymity.
+  surveyToken     String?   @unique
+  surveySentAt    DateTime?
+  surveyResponded Boolean   @default(false)
   events OrderEvent[]
 
   createdAt DateTime @default(now())
@@ -383,6 +394,10 @@ model WholeOrder {
   confirmSentAt  DateTime?
   reminderSentAt DateTime?
 
+  surveyToken     String?   @unique
+  surveySentAt    DateTime?
+  surveyResponded Boolean   @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -394,4 +409,41 @@ enum WholeStatus {
   CONFIRMED
   COLLECTED
   CANCELLED
+}
+
+
+/// A survey answer.
+///
+/// Deliberately holds no reference to an order or a customer — not an id,
+/// not a token, not a precise timestamp. The order it came from is marked
+/// "responded" with a boolean, so nothing can be matched back afterwards,
+/// even by whoever has the database.
+///
+/// `forDate` is the collection date, kept because feedback is only
+/// meaningful against what was being made that day.
+model Feedback {
+  id      String        @id @default(cuid())
+  rating  FeedbackScore
+  /// Flavour names as they were at the time. Stored as text so a renamed or
+  /// deleted flavour doesn't rewrite history.
+  flavours String[]     @default([])
+  comment String?
+  /// SLICE or WHOLE, so you can tell the two lines apart.
+  kind    String
+  forDate DateTime
+
+  /// Date only, no time. Enough to chart a month; not enough to match
+  /// against a particular order.
+  createdOn DateTime @default(now()) @db.Date
+
+  @@index([forDate])
+  @@index([rating])
+}
+
+enum FeedbackScore {
+  LOVED
+  REALLY_GOOD
+  GOOD
+  JUST_OK
+  NOT_GREAT
 }

@@ -59,6 +59,18 @@ export async function GET(req: Request) {
     allergens: {
       acceptedAt: order.allergenAcceptedAt,
       text: order.allergenText,
+      /*
+       * As they were when the order was placed, not as they are now. A
+       * flavour's allergens can be edited later, and a record that moved
+       * with them would be worthless in a dispute.
+       */
+      byFlavour: Object.entries(
+        (order.slices as unknown as { flavour: string; allergens?: string[] }[])
+          .reduce<Record<string, string[]>>((acc, s) => {
+            if (!acc[s.flavour]) acc[s.flavour] = s.allergens ?? [];
+            return acc;
+          }, {})
+      ).map(([flavour, list]) => ({ flavour, allergens: list })),
     },
     cancellation: order.cancelledAt
       ? {

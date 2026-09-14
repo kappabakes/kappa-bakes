@@ -81,9 +81,13 @@ export function WholeOrders({
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (d)
+          // Whole-cake availability is its own setting — a flavour archived
+          // from the slice menu can still be offered as a full cake.
           setFlavours(
             d.flavours
-              .filter((f: { active: boolean }) => f.active)
+              .filter((f: { wholeAvailable?: boolean }) =>
+                f.wholeAvailable !== false
+              )
               .map((f: { name: string }) => f.name)
           );
       })

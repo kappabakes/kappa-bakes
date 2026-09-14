@@ -82,8 +82,14 @@ export default function WholeRecord({ params }: { params: { id: string } }) {
       <h2 className="mt-6 text-[15px] font-bold">Order</h2>
       <ul className="mt-1">
         {o.items.map((it, n) => (
-          <li key={n}>
+          <li key={n} className="mb-1">
             {it.qty}× {describeItem(it)}
+            {/* As listed when the order was taken, not as they are now. */}
+            {it.allergens && it.allergens.length > 0 && (
+              <span className="block text-[12px] text-neutral-700">
+                Allergens: {it.allergens.join(", ")}
+              </span>
+            )}
           </li>
         ))}
       </ul>

@@ -19,6 +19,7 @@ type Flavour = {
   stockPerDay: number | null;
   serving: "CHOICE" | "ON_SLICE" | "IN_TUB";
   selectedDatesOnly: boolean;
+  wholeAvailable: boolean;
   dateStock?: { iso: string; stock: number }[];
   hasExtraSauce: boolean;
   sauceIds: string[];
@@ -38,6 +39,7 @@ const placeholder = {
   hasToppings: true,
   serving: "CHOICE" as "CHOICE" | "ON_SLICE" | "IN_TUB",
   selectedDatesOnly: false,
+  wholeAvailable: true,
   dateStock: [] as { iso: string; stock: number }[],
   hasExtraSauce: true,
   allergens: ["milk", "eggs", "gluten"] as string[],
@@ -137,6 +139,7 @@ export function MenuManager({ flash }: { flash: (m: string) => void }) {
       stockPerDay: f.stockPerDay ? String(f.stockPerDay) : "",
       serving: f.serving ?? "CHOICE",
       selectedDatesOnly: f.selectedDatesOnly ?? false,
+      wholeAvailable: f.wholeAvailable ?? true,
       dateStock: f.dateStock ?? [],
       hasExtraSauce: f.hasExtraSauce ?? true,
       sauceIds: f.sauceIds ?? [],
@@ -180,6 +183,7 @@ export function MenuManager({ flash }: { flash: (m: string) => void }) {
         stockPerDay: draft.stockPerDay ? Number(draft.stockPerDay) : null,
         serving: draft.serving,
         selectedDatesOnly: draft.selectedDatesOnly,
+        wholeAvailable: draft.wholeAvailable,
         dateStock: draft.selectedDatesOnly ? draft.dateStock : [],
         hasExtraSauce: draft.hasExtraSauce,
         sauceIds: draft.sauceIds,
@@ -444,6 +448,26 @@ export function MenuManager({ flash }: { flash: (m: string) => void }) {
                   <span className="block text-[12px] text-ink2">
                     Untick for a plain slice. Customers still choose on the
                     slice or in a tub if they add a sauce or a topping.
+                  </span>
+                </span>
+              </label>
+
+              {/* Slice menu and whole-cake menu are separate questions. */}
+              <label className="flex items-start gap-3 border-t border-line pt-4 text-[15px] text-ink">
+                <input
+                  type="checkbox"
+                  checked={draft.wholeAvailable}
+                  onChange={(e) =>
+                    setDraft({ ...draft, wholeAvailable: e.target.checked })
+                  }
+                  className="mt-1 h-4 w-4 accent-gold"
+                />
+                <span>
+                  Offer as a whole cheesecake
+                  <span className="block text-[12px] text-ink2">
+                    Independent of the slice menu. A flavour can be archived
+                    here and still orderable whole, or on the slice menu but
+                    not offered as a full cake.
                   </span>
                 </span>
               </label>
@@ -810,6 +834,11 @@ export function MenuManager({ flash }: { flash: (m: string) => void }) {
                     {f.description}
                   </p>
 
+                  {f.wholeAvailable === false && (
+                    <p className="mt-1 text-[12px] font-semibold text-ink2">
+                      Not offered whole
+                    </p>
+                  )}
                   {f.selectedDatesOnly && (
                     <p className="mt-1 text-[12px] font-semibold text-gold-hover">
                       Selected dates only
@@ -894,7 +923,23 @@ export function MenuManager({ flash }: { flash: (m: string) => void }) {
           <ul className="mt-4 divide-y divide-line">
             {archived.map((f) => (
               <li key={f.id} className="flex flex-wrap items-center gap-2 py-3">
-                <span className="grow text-ink2">{f.name}</span>
+                <span className="grow text-ink2">
+                  {f.name}
+                  {f.wholeAvailable !== false && (
+                    <span className="ml-2 rounded-md bg-gold-light px-2 py-0.5 text-[11px] font-semibold text-gold-hover">
+                      Offered whole
+                    </span>
+                  )}
+                </span>
+
+                {/* Archived from the slice menu, but still editable — that's
+                    how you set whether it's offered as a whole cake. */}
+                <button
+                  onClick={() => startEdit(f)}
+                  className="rounded-btn border border-navy bg-paper px-3 py-1.5 text-xs font-semibold text-navy transition-colors hover:bg-cream-warm"
+                >
+                  Edit
+                </button>
                 <button
                   onClick={() => restore(f)}
                   className="rounded-btn border border-navy bg-cream-beige px-3 py-1.5 text-xs font-semibold text-ink2 transition-colors hover:bg-line"

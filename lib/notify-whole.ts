@@ -65,6 +65,18 @@ function when(d: Date) {
 export function buildWholeEmail(p: WholePayload) {
   const { day, date, time } = when(p.collectAt);
   const lines = describeItems(p.items);
+
+  // One line per flavour ordered, from the snapshot on the order.
+  const seen = new Map<string, string[]>();
+  for (const it of p.items) {
+    const key = it.flavourB
+      ? `${it.flavour} / ${it.flavourB}`
+      : it.flavour;
+    if (it.allergens?.length) seen.set(key, it.allergens);
+  }
+  const allergenLines = [...seen].map(
+    ([name, list]) => `<strong>${name}</strong> — allergens: ${list.join(", ")}`
+  );
   const balance = balancePence(p.totalPence, p.depositPence);
   const wa = whatsappLink();
 
@@ -75,6 +87,11 @@ export function buildWholeEmail(p: WholePayload) {
 
       heading("YOUR ORDER"),
       lines.map((l) => para(l, "margin-bottom:4px;")).join(""),
+
+      // The allergens they were shown, in the copy they keep.
+      allergenLines.length
+        ? `<p style="margin:8px 0 0;font-size:13px;line-height:1.6;color:#5b6b7f;">${allergenLines.join("<br />")}</p>`
+        : "",
 
       `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0;">
          <tr><td style="font-size:16px;padding:4px 16px 4px 0;">Order total</td>
@@ -119,6 +136,9 @@ export function buildWholeEmail(p: WholePayload) {
     "",
     "YOUR ORDER",
     ...lines,
+    ...(allergenLines.length
+      ? ["", ...allergenLines.map((l) => l.replace(/<[^>]+>/g, ""))]
+      : []),
     "",
     `Order total: ${money(p.totalPence)}`,
     `Deposit taken: ${money(p.depositPence)}`,

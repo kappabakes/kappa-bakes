@@ -153,6 +153,22 @@ export function TestTools({ flash }: { flash: (m: string) => void }) {
         </button>
 
         <button
+          onClick={async () => {
+            const r = await fetch("/api/cron/prep?manual=true");
+            const d = await r.json();
+            flash(
+              r.ok
+                ? d.reason ??
+                    `Sent to ${d.sent}: ${d.slices} slices, ${d.wholes} whole`
+                : "Couldn't send the prep email."
+            );
+          }}
+          className="rounded-btn border border-navy bg-paper px-3 py-1.5 text-xs font-semibold text-navy transition-colors hover:bg-cream-beige"
+        >
+          Send prep email now
+        </button>
+
+        <button
           onClick={wipe}
           disabled={busy || count === 0}
           className="ml-auto border border-bad px-3 py-1.5 text-xs text-bad disabled:opacity-30"
