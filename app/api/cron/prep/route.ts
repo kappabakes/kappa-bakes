@@ -31,9 +31,16 @@ export async function GET(req: Request) {
   if (!manual && ukHour !== 7)
     return NextResponse.json({ skipped: `It's ${ukHour}:00 in London` });
 
-  const target = new Date(
-    Date.now() + PREP_DAYS_AHEAD * 24 * 60 * 60 * 1000
-  ).toLocaleDateString("en-CA", { timeZone: "Europe/London" });
+  /*
+   * Normally two days ahead. `?date=YYYY-MM-DD` overrides it, which is the
+   * only sane way to test — otherwise you'd have to have an order sitting
+   * exactly two days out.
+   */
+  const target =
+    url.searchParams.get("date") ??
+    new Date(
+      Date.now() + PREP_DAYS_AHEAD * 24 * 60 * 60 * 1000
+    ).toLocaleDateString("en-CA", { timeZone: "Europe/London" });
 
   // Once per date, however many times this runs.
   const key = `prepSent:${target}`;

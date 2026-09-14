@@ -176,7 +176,12 @@ export function buildPrepEmail(
 /** Sends to every admin address. */
 export async function sendPrepEmail(dateUk: string) {
   const prep = await gatherPrep(dateUk);
-  if (!prep.anything) return { sent: 0, reason: "Nothing on that date" };
+
+  if (!prep.anything)
+    return {
+      sent: 0,
+      reason: `No paid slice orders and no confirmed whole cakes for ${dateUk}. Check the collection date on the order, and that it isn't cancelled.`,
+    };
 
   const { subject, html, text } = buildPrepEmail(dateUk, prep);
   let sent = 0;

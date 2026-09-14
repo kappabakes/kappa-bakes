@@ -68,9 +68,35 @@ export async function GET(req: Request) {
     if ((await sendSurveyEmail(o.email, o.firstName, token)) === "Sent") sent++;
   }
 
+  /*
+   * When nothing qualifies, say what's actually on that date and how it
+   * failed the test — "asked: 0" on its own sends you hunting.
+   */
+  let why: string | undefined;
+  if (slices.length + wholes.length === 0) {
+    const onDate = await db.order.count({
+      where: { day: { gte: start, lt: end } },
+    });
+    const collected = await db.order.count({
+      where: {
+        day: { gte: start, lt: end },
+        status: OrderStatus.COLLECTED,
+      },
+    });
+    const wholeOnDate = await db.wholeOrder.count({
+      where: { collectAt: { gte: start, lt: end } },
+    });
+
+    why =
+      `${onDate} slice order(s) and ${wholeOnDate} whole order(s) on ${yesterdayUk}. ` +
+      `${collected} slice order(s) marked collected. ` +
+      `Only collected orders are asked, and each is only asked once.`;
+  }
+
   return NextResponse.json({
     asked: slices.length + wholes.length,
     sent,
     for: yesterdayUk,
+    ...(why ? { why } : {}),
   });
 }

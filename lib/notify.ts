@@ -84,6 +84,19 @@ export function buildEmail(p: Payload, updated = false) {
   const address = p.address ?? SHOP.addressLines;
   const lines = summarise(p.slices);
   const track = trackLink(p);
+
+  // One line per flavour ordered, from the snapshot stored on the order —
+  // not a lookup, so a later menu edit can't rewrite what they were shown.
+  const allergenByFlavour = new Map<string, string[]>();
+  for (const sl of p.slices as unknown as {
+    flavour: string;
+    allergens?: string[];
+  }[]) {
+    if (sl.allergens?.length) allergenByFlavour.set(sl.flavour, sl.allergens);
+  }
+  const allergenLines = [...allergenByFlavour].map(
+    ([f, list]) => `${f} — allergens: ${list.join(", ")}`
+  );
   const wa = whatsappLink();
 
   const text = [
@@ -92,6 +105,7 @@ export function buildEmail(p: Payload, updated = false) {
     "YOUR ORDER",
     `${p.slices.length} slice${p.slices.length === 1 ? "" : "s"}`,
     ...lines,
+    ...(allergenLines.length ? ["", ...allergenLines] : []),
     "",
     `Paid ${money(p.totalPence)}`,
     "Nothing to pay at the door — just give your order number.",
@@ -134,6 +148,15 @@ export function buildEmail(p: Payload, updated = false) {
         "margin-bottom:8px;font-size:18px;font-weight:bold;"
       ),
       lines.map((l) => para(l, "margin-bottom:4px;")).join(""),
+
+      allergenLines.length
+        ? `<p style="margin:8px 0 0;font-size:13px;line-height:1.6;color:#5b6b7f;">${allergenLines
+            .map((l) => {
+              const [name, rest] = l.split(" — ");
+              return `<strong>${name}</strong> — ${rest}`;
+            })
+            .join("<br />")}</p>`
+        : "",
 
       `<p style="margin:16px 0 4px;font-size:16px;font-weight:bold;">Paid ${money(p.totalPence)}</p>`,
       para(

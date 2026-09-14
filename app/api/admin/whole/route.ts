@@ -24,8 +24,6 @@ export async function GET(req: Request) {
   const archive = url.searchParams.get("archive") === "1";
   const q = (url.searchParams.get("q") ?? "").trim();
 
-  const now = new Date();
-
   const orders = await db.wholeOrder.findMany({
     where: {
       ...(q
@@ -38,21 +36,17 @@ export async function GET(req: Request) {
             ],
           }
         : {}),
-      // Upcoming is anything not yet collected or cancelled that's still to
-      // come. Everything else belongs in the archive.
+      /*
+       * Unlike slice orders, these don't archive when the date passes.
+       * Someone collecting late, or a day you haven't got round to marking
+       * off, shouldn't vanish from the list you work from — it archives when
+       * you say it's done, not when the calendar says so.
+       */
       ...(q
         ? {}
         : archive
-          ? {
-              OR: [
-                { collectAt: { lt: now } },
-                { status: { in: [WholeStatus.COLLECTED, WholeStatus.CANCELLED] } },
-              ],
-            }
-          : {
-              collectAt: { gte: now },
-              status: WholeStatus.CONFIRMED,
-            }),
+          ? { status: { in: [WholeStatus.COLLECTED, WholeStatus.CANCELLED] } }
+          : { status: WholeStatus.CONFIRMED }),
     },
     orderBy: { collectAt: archive || q ? "desc" : "asc" },
     take: 200,
