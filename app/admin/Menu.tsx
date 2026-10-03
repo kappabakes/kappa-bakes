@@ -5,6 +5,7 @@ import Image from "next/image";
 import { money } from "@/lib/config";
 import { Btn, Card, PageHead, Field, Area, Tag, Chip, readError } from "./ui";
 import { Extras } from "./Extras";
+import { AllergenPicker } from "./AllergenPicker";
 import { StockGroups } from "./StockGroups";
 
 type Flavour = {
@@ -99,8 +100,10 @@ export function MenuManager({ flash }: { flash: (m: string) => void }) {
 
   /** Adding one puts it on the list for every flavour to choose from. It
    *  isn't ticked anywhere until you tick it. */
-  async function addAllergen() {
-    const label = newAllergen.trim();
+  // Takes the label directly, so the popup can add one without going
+  // through the field this screen keeps for itself.
+  async function addAllergen(given?: string) {
+    const label = (given ?? newAllergen).trim();
     if (!label) return;
     const r = await fetch("/api/admin/allergens", {
       method: "POST",
@@ -696,41 +699,14 @@ export function MenuManager({ flash }: { flash: (m: string) => void }) {
                     shown on the menu and order page
                   </span>
                 </p>
-                <div className="flex flex-wrap gap-2">
-                  {allergens.map((a) => {
-                    const on = draft.allergens.includes(a.id);
-                    return (
-                      <Chip
-                        key={a.id}
-                        on={on}
-                        onClick={() =>
-                          setDraft({
-                            ...draft,
-                            allergens: on
-                              ? draft.allergens.filter((x) => x !== a.id)
-                              : [...draft.allergens, a.id],
-                          })
-                        }
-                      >
-                        {a.label}
-                      </Chip>
-                    );
-                  })}
-                </div>
-
-                <div className="mt-3 flex flex-wrap items-end gap-2">
-                  <Field
-                    label="Add another allergen"
-                    value={newAllergen}
-                    onChange={setNewAllergen}
-                    placeholder="e.g. Wheat"
-                    className="w-56"
-                    hint="Goes on the list for every flavour. Nothing is ticked automatically."
-                  />
-                  <Btn variant="ghost" onClick={addAllergen} disabled={!newAllergen.trim()}>
-                    Add
-                  </Btn>
-                </div>
+                {/* Behind a button: the list is long, rarely changed, and
+                    only matters when you're deliberately setting it. */}
+                <AllergenPicker
+                  value={draft.allergens}
+                  onChange={(next) => setDraft({ ...draft, allergens: next })}
+                  custom={allergens.filter((a) => a.custom)}
+                  onAddCustom={(label) => addAllergen(label)}
+                />
 
                 {allergens.some((a) => a.custom) && (
                   <p className="mt-2 text-[12px] text-muted">

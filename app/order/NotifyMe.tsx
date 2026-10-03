@@ -137,7 +137,8 @@ export function NotifyMe({
       </button>
 
       <p className="mt-2 text-center text-[11px] leading-snug text-muted">
-        One email per date at most. Unsubscribe link in every one.
+        You can unsubscribe at any time in the footer of the stock alert
+        email.
       </p>
     </div>
   );

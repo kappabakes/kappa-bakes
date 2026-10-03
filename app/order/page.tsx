@@ -345,30 +345,130 @@ function OrderPageInner() {
       ? (picks[f.id]?.length ?? 0)
       : generalPicked();
     if (alreadyFromSamePool >= left) return;
-    setPicks({
-      ...picks,
-      [f.id]: [
-        ...(picks[f.id] ?? []),
-        {
-          separate: false,
-          extra: null,
-          sauceIds: [],
-          warmSauceIds: [],
-          toppingIds: [],
-          drizzleIds: [],
-        },
-      ],
-    });
+    const next = [
+      ...(picks[f.id] ?? []),
+      {
+        separate: false,
+        extra: null,
+        sauceIds: [],
+        warmSauceIds: [],
+        toppingIds: [],
+        drizzleIds: [],
+      },
+    ];
+
+    setPicks({ ...picks, [f.id]: next });
+
+    // The new one is the draft: it opens, and nothing else does.
+    setDraft({ ...draft, [f.id]: next.length - 1 });
+    setDraftQty({ ...draftQty, [f.id]: 1 });
     setError(null);
   };
 
-  const removeOne = (f: Flavour) => {
-    const arr = (picks[f.id] ?? []).slice(0, -1);
+  /** Puts the draft away, duplicated as many times as asked for. */
+  const confirmDraft = (f: Flavour) => {
+    const i = draft[f.id];
+    const arr = picks[f.id] ?? [];
+    if (i === undefined || !arr[i]) return;
+
+    const want = Math.max(1, draftQty[f.id] ?? 1);
+    const copies = Array.from({ length: want - 1 }, () => ({ ...arr[i] }));
+
+    setPicks({ ...picks, [f.id]: [...arr, ...copies] });
+
+    const { [f.id]: _drop, ...rest } = draft;
+    setDraft(rest);
+  };
+
+  /** Drops the draft without keeping it. */
+  const cancelDraft = (f: Flavour) => {
+    const i = draft[f.id];
+    if (i === undefined) return;
+
+    const arr = (picks[f.id] ?? []).filter((_, j) => j !== i);
+    const next = { ...picks };
+    if (arr.length) next[f.id] = arr;
+    else delete next[f.id];
+    setPicks(next);
+
+    const { [f.id]: _drop, ...rest } = draft;
+    setDraft(rest);
+  };
+
+  /** Reopens a confirmed line, taking its slices back into the draft. */
+  const editLine = (f: Flavour, sig: string) => {
+    const arr = picks[f.id] ?? [];
+    const matching = arr.filter((s) => signature(s) === sig);
+    const kept = arr.filter((s) => signature(s) !== sig);
+    if (!matching.length) return;
+
+    setPicks({ ...picks, [f.id]: [...kept, matching[0]] });
+    setDraft({ ...draft, [f.id]: kept.length });
+    setDraftQty({ ...draftQty, [f.id]: matching.length });
+  };
+
+  /** Removes every slice on a confirmed line. */
+  const removeLine = (f: Flavour, sig: string) => {
+    const arr = (picks[f.id] ?? []).filter((s) => signature(s) !== sig);
     const next = { ...picks };
     if (arr.length) next[f.id] = arr;
     else delete next[f.id];
     setPicks(next);
   };
+
+  /*
+   * Which slice of a flavour is still being built, and how many of it are
+   * wanted. Everything else in picks is confirmed and shown as a one-line
+   * summary — three slices used to mean three open panels and a great deal
+   * of scrolling.
+   */
+  const [draft, setDraft] = useState<Record<string, number>>({});
+  const [draftQty, setDraftQty] = useState<Record<string, number>>({});
+
+  /** A confirmed slice in a few words, for its summary line. */
+  const describePick = (f: Flavour, s: Slice) => {
+    const nameOf = (id: string) => extras.find((e) => e.id === id)?.name ?? "";
+    const bits: string[] = [];
+
+    if (f.hasToppings)
+      bits.push(
+        f.serving === "IN_TUB"
+          ? "Toppings in a tub"
+          : f.serving === "ON_SLICE"
+            ? "Toppings on the slice"
+            : s.separate
+              ? "Toppings in a tub"
+              : "Toppings on the slice"
+      );
+
+    if (s.sauceIds.length)
+      bits.push(
+        s.sauceIds
+          .map((id) =>
+            s.warmSauceIds.includes(id) ? `${nameOf(id)} (warm)` : nameOf(id)
+          )
+          .join(", ")
+      );
+
+    if (s.drizzleIds.length)
+      bits.push(`${s.drizzleIds.map(nameOf).join(", ")} drizzle`);
+
+    if (s.toppingIds.length) bits.push(s.toppingIds.map(nameOf).join(", "));
+    if (s.extra) bits.push(`Extra sauce ${s.extra}`);
+
+    return bits.join(" · ");
+  };
+
+  /** Two slices are the same line when every choice on them matches. */
+  const signature = (s: Slice) =>
+    JSON.stringify([
+      s.separate,
+      s.extra,
+      [...s.sauceIds].sort(),
+      [...s.warmSauceIds].sort(),
+      [...s.toppingIds].sort(),
+      [...s.drizzleIds].sort(),
+    ]);
 
   const setSlice = (id: string, i: number, patch: Partial<Slice>) =>
     setPicks({
@@ -487,6 +587,9 @@ function OrderPageInner() {
     (f) => f.buildYourOwn && (picks[f.id] ?? []).some((s) => !s.sauceIds.length)
   );
 
+  // A slice left open mid-build hasn't been asked for yet.
+  const building = Object.keys(draft).length > 0;
+
   const missing =
     days?.length === 0 || (days && days.every((d) => d.soldOut))
       ? "Nothing available right now"
@@ -496,11 +599,13 @@ function OrderPageInner() {
           ? "Choose a collection date"
           : count === 0
             ? "Choose your slices"
-            : unfinished
-              ? "Choose a sauce for Create Your Own"
-              : !allergenOk || !policyOk
-              ? "Tick both boxes to continue"
-              : null;
+            : building
+              ? "Confirm your slice to continue"
+              : unfinished
+                ? "Choose a sauce for Create Your Own"
+                : !allergenOk || !policyOk
+                  ? "Tick both boxes to continue"
+                  : null;
 
   const wa = whatsappLink(`Hi ${SHOP.name}, I have a question about ordering`);
 
@@ -635,6 +740,11 @@ function OrderPageInner() {
                         (x) => groupFor(x.id)?.id === group.id
                       ).length
                     : 0;
+
+                  // Air below the last of a group, for the same reason.
+                  const lastOfGroup =
+                    group &&
+                    groupFor(shownFlavours[fi + 1]?.id ?? "")?.id !== group.id;
                   const soldOut = left !== null && left <= 0;
                   return (
                     // Keyed fragment: two list items come out of one flavour
@@ -646,7 +756,10 @@ function OrderPageInner() {
                       {firstOfGroup && group && (
                         <li
                           key={`${group.id}-head`}
-                          className="overflow-hidden rounded-card border border-gold/60 bg-gold-light"
+                          // Air above, so the shared count reads as belonging
+                          // to the flavours under it rather than the one
+                          // above.
+                          className="mt-4 overflow-hidden rounded-card border border-gold/60 bg-gold-light"
                         >
                           <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5">
                             <span className="text-[12px] font-bold uppercase tracking-wide text-gold-hover">
@@ -679,14 +792,22 @@ function OrderPageInner() {
                       className={[
                         "overflow-hidden rounded-card border bg-cream-warm",
                         group ? "border-gold/40" : "border-line",
-                        soldOut ? "opacity-60" : "",
+                        lastOfGroup ? "mb-4" : "",
+                        soldOut ? "bg-cream-beige/60" : "",
                       ].join(" ")}
                     >
                       <div className="flex flex-wrap items-center gap-3 p-3 sm:flex-nowrap sm:gap-4">
                         {f.image && (
                           <button
                             onClick={() => setZoom(f)}
-                            className="relative h-20 w-20 shrink-0 overflow-hidden rounded-[14px] bg-cream-beige"
+                            className={[
+                              "relative h-20 w-20 shrink-0 overflow-hidden rounded-[14px] bg-cream-beige",
+                              // Dimmed individually rather than dimming the
+                              // whole card: opacity on a parent can't be
+                              // undone by a child, and the notify panel
+                              // inside has to stay readable.
+                              soldOut ? "opacity-60" : "",
+                            ].join(" ")}
                             aria-label={`See a photo of ${f.name}`}
                           >
                             <Image src={f.image} alt="" fill sizes="160px" quality={95}
@@ -695,10 +816,17 @@ function OrderPageInner() {
                         )}
 
                         <div className="min-w-[55%] grow">
-                          <p className="font-display text-lg text-ink">{f.name}</p>
-                          <p className="mt-0.5 whitespace-pre-line text-[13px] leading-snug text-ink2">
-                            {f.description}
-                          </p>
+                          {/* The name and description dim, the notify panel
+                              below them doesn't — opacity on a shared parent
+                              would take the panel with it. */}
+                          <div className={soldOut ? "opacity-60" : ""}>
+                            <p className="font-display text-lg text-ink">
+                              {f.name}
+                            </p>
+                            <p className="mt-0.5 whitespace-pre-line text-[13px] leading-snug text-ink2">
+                              {f.description}
+                            </p>
+                          </div>
                           {soldOut ? (
                             <>
                               <p className="mt-1 text-[12px] font-semibold uppercase tracking-wide text-bad">
@@ -706,6 +834,9 @@ function OrderPageInner() {
                               </p>
                               {/* Only on a sold-out flavour — there's nothing
                                   to wait for otherwise. */}
+                              {/* Full strength inside a dimmed card: a
+                                  greyed-out box reads as "you can't type
+                                  here", which is the opposite of true. */}
                               <NotifyMe
                                 flavourId={f.id}
                                 flavourName={f.name}
@@ -760,29 +891,71 @@ function OrderPageInner() {
 
                         <div className="ml-auto shrink-0 text-right">
                           <p className="font-semibold text-ink">{money(f.pricePence)}</p>
-                          <div className="mt-2 flex items-center overflow-hidden rounded-btn border border-field bg-paper">
-                            <button
-                              onClick={() => removeOne(f)}
-                              disabled={!chosen.length}
-                              className="px-3 py-1.5 text-lg text-ink disabled:opacity-25"
-                              aria-label={`Remove a ${f.name}`}
-                            >
-                              −
-                            </button>
-                            <span className="w-8 text-center text-sm font-semibold">
-                              {chosen.length}
-                            </span>
-                            <button
-                              onClick={() => add(f)}
-                              disabled={count >= maxSlices}
-                              className="px-3 py-1.5 text-lg text-ink disabled:opacity-25"
-                              aria-label={`Add a ${f.name}`}
-                            >
-                              +
-                            </button>
-                          </div>
+                          {/*
+                            One button, not a stepper. How many of a given
+                            combination is asked inside the panel, where the
+                            choices that distinguish them are being made.
+                          */}
+                          <button
+                            onClick={() => add(f)}
+                            disabled={
+                              count >= maxSlices ||
+                              soldOut ||
+                              draft[f.id] !== undefined
+                            }
+                            className="mt-2 whitespace-nowrap rounded-btn border-[1.5px] border-navy bg-paper px-4 py-2 text-[13px] font-bold text-navy disabled:opacity-30"
+                          >
+                            {chosen.length ? "+ Add another" : "+ Add a slice"}
+                          </button>
                         </div>
                       </div>
+
+                      {/*
+                        Confirmed combinations, one line each with how many.
+                        Three identical slices are one line rather than three
+                        open panels — which is what made this unreadable.
+                      */}
+                      {(() => {
+                        const lines = new Map<string, Slice[]>();
+                        chosen.forEach((sl, i) => {
+                          if (draft[f.id] === i) return;
+                          const sig = signature(sl);
+                          lines.set(sig, [...(lines.get(sig) ?? []), sl]);
+                        });
+
+                        if (!lines.size) return null;
+
+                        return (
+                          <ul className="space-y-1.5 border-t border-line bg-paper px-3 py-2.5">
+                            {[...lines].map(([sig, group]) => (
+                              <li
+                                key={sig}
+                                className="flex items-center gap-2.5 rounded-btn bg-cream-warm px-3 py-2"
+                              >
+                                <span className="shrink-0 rounded-md bg-navy px-1.5 py-0.5 text-[11px] font-bold text-white">
+                                  {group.length}×
+                                </span>
+                                <span className="grow text-[13px] leading-snug text-ink">
+                                  {describePick(f, group[0]) || "As it comes"}
+                                </span>
+                                <button
+                                  onClick={() => editLine(f, sig)}
+                                  className="shrink-0 text-[11.5px] font-bold text-gold-hover underline underline-offset-4"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => removeLine(f, sig)}
+                                  aria-label="Remove"
+                                  className="shrink-0 px-1 text-[15px] text-muted"
+                                >
+                                  ✕
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        );
+                      })()}
 
                       {/* One row per slice, so two of the same flavour can be
                           dressed differently. Added sauce and toppings follow
@@ -793,6 +966,9 @@ function OrderPageInner() {
                         chosen.length > 0 && (
                           <div className="space-y-3 border-t border-line bg-paper p-3">
                             {chosen.map((slice, i) => {
+                              // Everything except the one being built is
+                              // shown as a line above instead.
+                              if (draft[f.id] !== i) return null;
                               // What this slice actually gets, given the
                               // flavour's own rule.
                               const where =
@@ -1290,6 +1466,96 @@ function OrderPageInner() {
                                   )}
                                     </>
                                   )}
+
+                                  {/*
+                                    How many of this exact combination. Asking
+                                    here rather than afterwards means the
+                                    price is settled before it collapses into
+                                    a line.
+                                  */}
+                                  <div className="mt-3 flex items-center justify-between gap-3 border-t border-line pt-3">
+                                    <span className="text-[13px] font-semibold text-ink">
+                                      How many like this?
+                                    </span>
+                                    <span className="flex items-center gap-3">
+                                      <button
+                                        onClick={() =>
+                                          setDraftQty({
+                                            ...draftQty,
+                                            [f.id]: Math.max(
+                                              1,
+                                              (draftQty[f.id] ?? 1) - 1
+                                            ),
+                                          })
+                                        }
+                                        disabled={(draftQty[f.id] ?? 1) <= 1}
+                                        className="h-8 w-8 rounded-btn border border-field bg-paper text-lg text-ink disabled:opacity-25"
+                                        aria-label="One fewer"
+                                      >
+                                        −
+                                      </button>
+                                      <span className="w-5 text-center text-[16px] font-bold">
+                                        {draftQty[f.id] ?? 1}
+                                      </span>
+                                      <button
+                                        onClick={() =>
+                                          setDraftQty({
+                                            ...draftQty,
+                                            [f.id]: (draftQty[f.id] ?? 1) + 1,
+                                          })
+                                        }
+                                        // Stops at whatever would be refused
+                                        // at checkout, rather than letting
+                                        // someone pick 5 and find out later.
+                                        disabled={
+                                          count + (draftQty[f.id] ?? 1) - 1 >=
+                                            maxSlices ||
+                                          (f.maxPerOrder
+                                            ? chosen.length +
+                                                (draftQty[f.id] ?? 1) -
+                                                1 >=
+                                              f.maxPerOrder
+                                            : false) ||
+                                          (left !== null &&
+                                            (hasOwnStock(f.id)
+                                              ? chosen.length
+                                              : generalPicked()) +
+                                              (draftQty[f.id] ?? 1) -
+                                              1 >=
+                                              left)
+                                        }
+                                        className="h-8 w-8 rounded-btn border border-navy bg-navy text-lg text-white disabled:opacity-25"
+                                        aria-label="One more"
+                                      >
+                                        +
+                                      </button>
+                                    </span>
+                                  </div>
+
+                                  <button
+                                    onClick={() => confirmDraft(f)}
+                                    className="mt-2.5 w-full rounded-btn bg-navy py-3 text-[14px] font-bold text-white"
+                                  >
+                                    Confirm ·{" "}
+                                    {draftQty[f.id] ?? 1} slice
+                                    {(draftQty[f.id] ?? 1) === 1 ? "" : "s"} ·{" "}
+                                    {money(
+                                      sliceTotal(f.id, slice) *
+                                        (draftQty[f.id] ?? 1)
+                                    )}
+                                  </button>
+
+                                  <button
+                                    onClick={() => cancelDraft(f)}
+                                    className="mt-1.5 w-full py-1.5 text-center text-[12px] text-ink2 underline underline-offset-4"
+                                  >
+                                    Cancel this slice
+                                  </button>
+
+                                  <p className="mt-1 text-center text-[11.5px] leading-snug text-muted">
+                                    You can add another slice with different
+                                    choices after.
+                                  </p>
                                 </div>
                               );
                             })}

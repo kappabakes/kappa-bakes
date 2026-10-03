@@ -79,7 +79,7 @@ export function GroupShares({
   }
 
   return (
-    <div className="mt-2 rounded-card border border-gold/40 bg-gold-light/40 p-3">
+    <div className="mt-4 w-full rounded-card border-[1.5px] border-gold/50 bg-gold-light/40 p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <span className="text-[12px] font-bold uppercase tracking-wide text-gold-hover">
           {groupName}
@@ -91,10 +91,13 @@ export function GroupShares({
 
       <ul className="mt-2 space-y-1.5">
         {rows.map((r) => (
-          <li key={r.flavourId} className="flex flex-wrap items-center gap-2">
-            <span className="min-w-[8rem] grow text-[14px] text-ink">
+          <li
+            key={r.flavourId}
+            className="flex flex-wrap items-center gap-3 border-b border-gold/15 py-2 last:border-0"
+          >
+            <span className="min-w-[9rem] grow text-[14.5px] text-ink">
               {r.name}
-              <span className="ml-1.5 text-[12px] text-ink2">
+              <span className="ml-2 text-[12px] text-ink2">
                 {r.sold} sold
               </span>
             </span>

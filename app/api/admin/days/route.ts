@@ -140,7 +140,6 @@ async function shape(d: {
   );
   let specialLeft = 0;
   let specialCapacity = 0;
-  const countedGroups = new Set<string>();
   for (const row of Object.values(perFlavour)) {
     // A special not offered on this date contributes nothing. Its stock
     // figure still exists — it's what the flavour makes on a date it IS
@@ -148,11 +147,12 @@ async function shape(d: {
     if (!row.offered) continue;
     if (row.stock === null || row.stock === undefined) continue;
 
-    // A shared cake counts once, however many flavours draw on it.
-    if (row.group) {
-      if (countedGroups.has(row.group.id)) continue;
-      countedGroups.add(row.group.id);
-    }
+    /*
+     * Shared cakes are reported separately, by name — a figure that mixed
+     * them in with single-flavour specials couldn't say which cake was
+     * nearly gone, which is the thing worth knowing.
+     */
+    if (row.group) continue;
 
     specialLeft += row.left ?? 0;
     specialCapacity += row.stock;

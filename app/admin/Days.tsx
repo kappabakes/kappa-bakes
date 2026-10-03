@@ -368,6 +368,22 @@ export function DaysManager({ flash }: { flash: (m: string) => void }) {
                       {d.held} being paid for
                     </Tag>
                   )}
+                  {/*
+                    A shared cake gets its own tag under its own name. Folding
+                    it into "special" was wrong twice over: a special is a
+                    special flavour, and one combined figure can't tell you
+                    which cake is nearly gone.
+                  */}
+                  {d.groups?.map((g) => {
+                    const sold = g.rows.reduce((n, r) => n + r.sold, 0);
+                    const left = Math.max(0, g.stock - sold);
+                    return (
+                      <Tag key={g.id} tone={left === 0 ? "bad" : "good"}>
+                        {g.name} · {left} of {g.stock}
+                      </Tag>
+                    );
+                  })}
+
                   {d.specialCapacity > 0 && (
                     <Tag tone="good">
                       +{d.specialLeft} of {d.specialCapacity} special
@@ -443,18 +459,6 @@ export function DaysManager({ flash }: { flash: (m: string) => void }) {
                   saveDay(d.iso, { maxPerOrder: v ? Number(v) : null })
                 }
               />
-              {d.groups?.map((g) => (
-                <GroupShares
-                  key={g.id}
-                  dayIso={d.iso}
-                  groupName={g.name}
-                  groupStock={g.stock}
-                  rows={g.rows}
-                  onSaved={load}
-                  flash={flash}
-                />
-              ))}
-
               <TimeField
                 label="From"
                 value={d.startTime}
@@ -477,6 +481,21 @@ export function DaysManager({ flash }: { flash: (m: string) => void }) {
                 }
               />
             </div>
+
+            {/* Full width under the fields rather than squeezed in among
+                them: it's a table of flavours, which reads sideways, not a
+                single value in a box. */}
+            {d.groups?.map((g) => (
+              <GroupShares
+                key={g.id}
+                dayIso={d.iso}
+                groupName={g.name}
+                groupStock={g.stock}
+                rows={g.rows}
+                onSaved={load}
+                flash={flash}
+              />
+            ))}
 
             <Commit
               label="Note shown on the site (optional)"
@@ -872,6 +891,21 @@ function TimeField({
   value: string;
   onCommit: (v: string) => void;
 }) {
+  /*
+   * Held locally while being edited.
+   *
+   * Driving the input straight from the saved value fought the typing: a
+   * half-entered time isn't valid, so nothing was committed, so the value
+   * snapped back to what was there before — which on desktop, where you type
+   * rather than scroll, made it impossible to change.
+   */
+  const [draft, setDraft] = useState(to24(value));
+
+  // Follow the saved value when it changes elsewhere, but not mid-edit.
+  useEffect(() => {
+    setDraft(to24(value));
+  }, [value]);
+
   return (
     <label className="block">
       <span className="mb-1.5 block text-[13px] font-semibold text-ink">
@@ -879,8 +913,19 @@ function TimeField({
       </span>
       <input
         type="time"
-        value={to24(value)}
-        onChange={(e) => e.target.value && onCommit(to12(e.target.value))}
+        value={draft}
+        onChange={(e) => {
+          setDraft(e.target.value);
+          // Only a complete time is worth saving; the rest is someone
+          // halfway through typing one.
+          if (/^\d{2}:\d{2}$/.test(e.target.value))
+            onCommit(to12(e.target.value));
+        }}
+        onBlur={() => {
+          // Left half-finished: put back what's actually saved rather than
+          // leaving a box that looks set but isn't.
+          if (!/^\d{2}:\d{2}$/.test(draft)) setDraft(to24(value));
+        }}
         className="w-full rounded-btn border border-field bg-paper px-3 py-2.5 text-[15px] text-ink focus:border-gold focus:outline-none"
       />
     </label>

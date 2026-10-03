@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { money, ALLERGENS } from "@/lib/config";
+import { money } from "@/lib/config";
+import { AllergenPicker } from "./AllergenPicker";
 import { Btn, Card, Field, readError } from "./ui";
 
 type Extra = {
@@ -235,41 +236,14 @@ function Group({
             </button>
            </div>
 
-            {/* Shown to customers when this is added, and copied onto the
-                order. Leaving it empty tells them it contains none — so
-                fill it in. */}
-            <div className="mt-2 flex flex-wrap items-center gap-1.5 pl-8">
-              <span className="mr-1 text-[12px] font-semibold text-ink2">
-                Allergens:
-              </span>
-              {ALLERGENS.map((a) => {
-                const on = (e.allergens ?? []).includes(a.id);
-                return (
-                  <button
-                    key={a.id}
-                    onClick={() =>
-                      update(e, {
-                        allergens: on
-                          ? e.allergens.filter((x) => x !== a.id)
-                          : [...(e.allergens ?? []), a.id],
-                      })
-                    }
-                    className={[
-                      "rounded-full border px-2.5 py-0.5 text-[12px] transition-colors",
-                      on
-                        ? "border-navy bg-navy text-white"
-                        : "border-field bg-paper text-ink2 hover:bg-cream-warm",
-                    ].join(" ")}
-                  >
-                    {a.label}
-                  </button>
-                );
-              })}
-              {(e.allergens ?? []).length === 0 && (
-                <span className="text-[11px] font-semibold text-bad">
-                  None set
-                </span>
-              )}
+            {/* Behind a button: fourteen tick boxes under every item made
+                this list unreadable. Still flagged when unset, because an
+                empty list tells a customer it contains none. */}
+            <div className="mt-2 pl-8">
+              <AllergenPicker
+                value={e.allergens ?? []}
+                onChange={(next) => update(e, { allergens: next })}
+              />
             </div>
           </li>
         ))}
