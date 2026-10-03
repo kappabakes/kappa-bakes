@@ -29,6 +29,7 @@ type Slice = {
   /// Older orders stored a single sauce.
   addedSauce?: { name: string } | null;
   addedToppings?: { name: string; pricePence: number }[] | null;
+  addedDrizzles?: { name: string; pricePence: number; allergens?: string[] }[] | null;
   pricePence: number;
 };
 
@@ -68,6 +69,7 @@ export default async function Confirmed({
       s.extraSauce ?? "",
       (s.addedSauces ?? []).map((x) => x.name).join(",") || (s.addedSauce?.name ?? ""),
       (s.addedToppings ?? []).map((t) => t.name).join(","),
+      (s.addedDrizzles ?? []).map((t) => t.name).join(","),
     ].join("|");
     const row = grouped.get(key) ?? { n: 0, line: s };
     row.n++;
@@ -163,6 +165,14 @@ export default async function Confirmed({
                                 })
                                 .join(", ")
                             : line.addedSauce?.name}
+                        </p>
+                      )}
+                      {line.addedDrizzles && line.addedDrizzles.length > 0 && (
+                        <p className="text-[13px] font-semibold text-gold">
+                          {line.addedDrizzles.length > 1
+                            ? "Drizzles: "
+                            : "Drizzle: "}
+                          {line.addedDrizzles.map((t) => t.name).join(", ")}
                         </p>
                       )}
                       {line.addedToppings && line.addedToppings.length > 0 && (

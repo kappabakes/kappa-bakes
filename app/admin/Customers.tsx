@@ -19,6 +19,7 @@ type Customer = {
 export function Customers({ flash }: { flash: (m: string) => void }) {
   const [q, setQ] = useState("");
   const [rows, setRows] = useState<Customer[]>([]);
+  const [view, setView] = useState<"all" | "repeat">("all");
 
   const load = useCallback(async (search = "") => {
     const r = await fetch(
@@ -34,12 +35,58 @@ export function Customers({ flash }: { flash: (m: string) => void }) {
   const spend = rows.reduce((n, c) => n + c.totalPence, 0);
   const repeat = rows.filter((c) => c.orderCount > 1).length;
 
+  /*
+   * Default stays newest-first, which is what you want day to day. Repeat
+   * customers is a different question — who comes back most — so choosing it
+   * also sorts by order count rather than leaving them in date order.
+   */
+  const shown = (view === "repeat"
+    ? rows.filter((c) => c.orderCount > 1)
+    : rows
+  )
+    .slice()
+    .sort((a, b) =>
+      view === "repeat"
+        ? b.orderCount - a.orderCount ||
+          b.totalPence - a.totalPence ||
+          a.lastName.localeCompare(b.lastName)
+        : 0
+    );
+
   return (
     <>
       <PageHead
         title="Customers"
         note="Built from paid orders. One row per person, not per order."
       />
+
+      <div className="mb-4 flex flex-wrap gap-2">
+        {(
+          [
+            ["all", `Everyone (${rows.length})`],
+            ["repeat", `Repeat customers (${repeat})`],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            onClick={() => setView(value)}
+            className={[
+              "rounded-btn px-3 py-1.5 text-[13px] font-medium transition-colors",
+              view === value
+                ? "bg-navy text-white"
+                : "bg-cream-beige text-ink2 hover:bg-cream-warm",
+            ].join(" ")}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {view === "repeat" && (
+        <p className="mb-3 text-[13px] text-ink2">
+          Most orders first.
+        </p>
+      )}
 
       <div className="mb-5 grid gap-4 sm:grid-cols-3">
         <Card>
@@ -86,7 +133,7 @@ export function Customers({ flash }: { flash: (m: string) => void }) {
         </div>
 
         <ul className="mt-5 divide-y divide-line">
-          {rows.map((c) => (
+          {shown.map((c) => (
             <li key={c.email} className="flex flex-wrap items-center gap-3 py-3">
               <div className="grow">
                 <p className="font-semibold text-ink">
@@ -166,7 +213,7 @@ export function Customers({ flash }: { flash: (m: string) => void }) {
               </button>
             </li>
           ))}
-          {rows.length === 0 && (
+          {shown.length === 0 && (
             <li className="py-6 text-center text-sm text-ink2">
               No customers yet. They appear after their first paid order.
             </li>

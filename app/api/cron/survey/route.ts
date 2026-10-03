@@ -3,6 +3,7 @@ import { db } from "@/lib/stock";
 import { newSurveyToken } from "@/lib/survey";
 import { sendSurveyEmail } from "@/lib/notify-survey";
 import { OrderStatus, WholeStatus } from "@prisma/client";
+import { isUkHour, ukHourNow } from "@/lib/uk-time";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,10 @@ export async function GET(req: Request) {
 
   if (!manual && auth !== `Bearer ${process.env.CRON_SECRET}`)
     return new NextResponse("Nope", { status: 401 });
+
+  // Noon in London, all year.
+  if (!isUkHour(12, manual))
+    return NextResponse.json({ skipped: `It's ${ukHourNow()}:00 in London` });
 
   // Yesterday, in UK terms.
   const { ukWallTimeToUtc } = await import("@/lib/whole");

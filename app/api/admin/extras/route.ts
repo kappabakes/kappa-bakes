@@ -19,12 +19,13 @@ export async function POST(req: Request) {
   if (!authed()) return new NextResponse("Nope", { status: 401 });
   const b = (await req.json()) as {
     id?: string;
-    kind: "SAUCE" | "TOPPING";
+    kind: "SAUCE" | "TOPPING" | "DRIZZLE";
     name: string;
     pricePence: number;
     active?: boolean;
     canTub?: boolean;
     warm?: "NEVER" | "CHOICE" | "ALWAYS";
+    allergens?: string[];
     sortOrder?: number;
   };
 
@@ -40,6 +41,7 @@ export async function POST(req: Request) {
     active: b.active ?? true,
     canTub: b.canTub ?? true,
     warm: b.warm ?? "NEVER",
+    allergens: b.allergens ?? [],
     sortOrder: b.sortOrder ?? 0,
   };
 

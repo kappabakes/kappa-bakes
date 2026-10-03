@@ -40,6 +40,7 @@ type Incoming = {
     addedSauceIds?: string[];
     warmSauceIds?: string[];
     addedToppingIds?: string[];
+    addedDrizzleIds?: string[];
   }[];
 };
 

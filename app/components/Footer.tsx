@@ -82,6 +82,7 @@ export function Footer() {
         <div className="mt-8 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 border-t border-white/10 pt-5 text-[12px] text-[#D5E1EC]">
           <span>{SHOP.name}</span>
           <SmartLink href="/menu" className="hover:text-white">Menu</SmartLink>
+          <SmartLink href="/full-cheesecakes" className="hover:text-white">Full cheesecakes</SmartLink>
           <SmartLink href="/faq" className="hover:text-white">FAQs</SmartLink>
           <SmartLink href="/track" className="hover:text-white">Track an order</SmartLink>
           <SmartLink href="/privacy" className="hover:text-white">

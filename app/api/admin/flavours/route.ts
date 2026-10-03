@@ -53,6 +53,7 @@ export async function POST(req: Request) {
     serving?: "CHOICE" | "ON_SLICE" | "IN_TUB";
     selectedDatesOnly?: boolean;
     wholeAvailable?: boolean;
+    buildYourOwn?: boolean;
     /// Which dates it's offered on, and how many. Only sent when the flavour
     /// is limited to selected dates.
     dateStock?: { iso: string; stock: number }[];
@@ -61,6 +62,8 @@ export async function POST(req: Request) {
     toppingIds?: string[];
     maxSauces?: number;
     maxToppings?: number;
+    drizzleIds?: string[];
+    maxDrizzles?: number;
     active?: boolean;
     sortOrder?: number;
   };
@@ -88,18 +91,33 @@ export async function POST(req: Request) {
     serving: b.serving ?? "CHOICE",
     selectedDatesOnly: b.selectedDatesOnly ?? false,
     wholeAvailable: b.wholeAvailable ?? true,
+    buildYourOwn: b.buildYourOwn ?? false,
     hasExtraSauce: b.hasExtraSauce ?? true,
     sauceIds: b.sauceIds ?? [],
     toppingIds: b.toppingIds ?? [],
-    maxSauces: Math.max(1, Math.floor(Number(b.maxSauces) || 1)),
-    maxToppings: Math.max(1, Math.floor(Number(b.maxToppings) || 2)),
-    active: b.active ?? true,
+    // 0 is "no limit".
+    maxSauces: Math.max(0, Math.floor(Number(b.maxSauces ?? 1))),
+    maxToppings: Math.max(0, Math.floor(Number(b.maxToppings ?? 2))),
+    drizzleIds: b.drizzleIds ?? [],
+    maxDrizzles: Math.max(0, Math.floor(Number(b.maxDrizzles ?? 1))),
     sortOrder: b.sortOrder ?? 0,
   };
 
+  /*
+   * Whether it's on the menu is only decided here when creating, or when the
+   * caller says so explicitly. The editor doesn't send it — so defaulting it
+   * on an update silently unarchived any archived flavour you edited, which
+   * looked like it had vanished.
+   */
   const flavour = b.id
-    ? await db.flavour.update({ where: { id: b.id }, data })
-    : await db.flavour.create({ data });
+    ? await db.flavour.update({
+        where: { id: b.id },
+        data: {
+          ...data,
+          ...(b.active === undefined ? {} : { active: b.active }),
+        },
+      })
+    : await db.flavour.create({ data: { ...data, active: b.active ?? true } });
 
   // Replace the date list wholesale: what you saved is what it's offered on.
   if (b.dateStock) {

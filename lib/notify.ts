@@ -1,3 +1,4 @@
+import { allergenRows } from "./extras";
 import {
   emailShell,
   heading,
@@ -13,6 +14,7 @@ import {
   HEADS_UP_NOTE,
   GRACE_NOTE,
   whatsappLink,
+  allergenLabel,
 } from "./config";
 
 export type SliceLine = {
@@ -30,6 +32,7 @@ export type SliceLine = {
   /// Older orders stored a single sauce.
   addedSauce?: { name: string } | null;
   addedToppings?: { name: string; pricePence: number }[] | null;
+  addedDrizzles?: { name: string; pricePence: number; allergens?: string[] }[] | null;
 };
 
 /**
@@ -60,6 +63,9 @@ export function summarise(slices: SliceLine[]): string[] {
     if (sauceNames.length) key += ` + ${sauceNames.join(", ")}`;
     if (s.addedToppings?.length)
       key += ` + ${s.addedToppings.map((t) => t.name).join(", ")}`;
+    // Named as a drizzle, so a prep list doesn't read it as another topping.
+    if (s.addedDrizzles?.length)
+      key += ` + ${s.addedDrizzles.map((t) => t.name).join(", ")} drizzle`;
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
   return [...counts].map(([label, n]) => `- ${n}x ${label}`);
@@ -85,18 +91,15 @@ export function buildEmail(p: Payload, updated = false) {
   const lines = summarise(p.slices);
   const track = trackLink(p);
 
-  // One line per flavour ordered, from the snapshot stored on the order —
-  // not a lookup, so a later menu edit can't rewrite what they were shown.
-  const allergenByFlavour = new Map<string, string[]>();
-  for (const sl of p.slices as unknown as {
-    flavour: string;
-    allergens?: string[];
-  }[]) {
-    if (sl.allergens?.length) allergenByFlavour.set(sl.flavour, sl.allergens);
-  }
-  const allergenLines = [...allergenByFlavour].map(
-    ([f, list]) => `${f} — allergens: ${list.join(", ")}`
-  );
+  // From the snapshot stored on the order, not a lookup, so a later menu
+  // edit can't rewrite what they were shown. Same grouping as the order
+  // page: extras listed separately, except on Create Your Own.
+  const allergenLines = allergenRows(p.slices as never)
+    .filter((r) => r.allergens.length)
+    .map(
+      (r) =>
+        `${r.name}${r.kind === "Flavour" ? "" : ` (${r.kind.toLowerCase()})`} — allergens: ${r.allergens.map((a) => allergenLabel(a)).join(", ")}`
+    );
   const wa = whatsappLink();
 
   const text = [

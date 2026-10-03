@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
 import { currentAdmin } from "@/lib/auth";
 import { db } from "@/lib/stock";
+import {
+  buildCancelledEmail,
+  refundLine,
+  sendStatusEmail,
+} from "@/lib/notify-status";
 import { OrderStatus } from "@prisma/client";
+import { runStockAlerts } from "@/lib/alerts";
 
 export const dynamic = "force-dynamic";
 
@@ -24,12 +30,16 @@ const CANCEL_REASONS: Record<string, string> = {
 export async function POST(req: Request) {
   if (!currentAdmin()) return new NextResponse("Nope", { status: 401 });
 
-  const { id, reason, note, undo } = (await req.json()) as {
+  const b = (await req.json()) as {
     id: string;
     reason?: "CUSTOMER" | "OTHER";
     note?: string;
     undo?: boolean;
+    sendEmail?: boolean;
+    refund?: "NONE" | "FULL" | "PARTIAL" | "NOTHING_PAID";
+    refundPence?: number;
   };
+  const { id, reason, note, undo } = b;
 
   const order = await db.order.findUnique({ where: { id } });
   if (!order)
@@ -83,6 +93,32 @@ export async function POST(req: Request) {
         .join(" "),
     },
   });
+
+  /*
+   * Only when you ask for one. Whether to tell someone depends entirely on
+   * why it was cancelled, and a surprise email after you've already sorted
+   * it by message is worse than none.
+   */
+  if (b.sendEmail) {
+    const status = await sendStatusEmail(
+      order.email,
+      buildCancelledEmail(
+        order.firstName,
+        refundLine(b.refund ?? "NONE", order.totalPence, b.refundPence),
+        order.orderNo
+      )
+    );
+    await db.orderEvent.create({
+      data: {
+        orderId: order.id,
+        kind: "Cancellation email sent",
+        detail: `Email ${status}.`,
+      },
+    });
+  }
+
+  // The slices are back on sale, so anyone waiting should hear.
+  await runStockAlerts();
 
   return NextResponse.json({ ok: true, cancelledAt: at });
 }

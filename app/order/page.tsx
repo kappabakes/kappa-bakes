@@ -1,7 +1,14 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useState } from "react";
+import {
+  Fragment,
+  Suspense,
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
 import { useSearchParams } from "next/navigation";
+import { NotifyMe } from "./NotifyMe";
 import Image from "next/image";
 import {
   money,
@@ -38,6 +45,11 @@ type Flavour = {
   toppingIds: string[];
   maxSauces: number;
   maxToppings: number;
+  /// Poured over the top, after any toppings.
+  drizzleIds: string[];
+  maxDrizzles: number;
+  /// Sauce chosen first and required, toppings after. First sauce included.
+  buildYourOwn?: boolean;
 };
 
 /** How many of each flavour are left, for the chosen date. */
@@ -45,7 +57,14 @@ type Stock = Record<
   string,
   Record<
     string,
-    { sold: number; stock: number | null; left: number | null; offered: boolean }
+    {
+      sold: number;
+      stock: number | null;
+      left: number | null;
+      offered: boolean;
+      /// Set when this flavour's count comes from a cake shared with others.
+      group?: { id: string; name: string; stock: number; left: number };
+    }
   >
 >;
 type Day = {
@@ -68,10 +87,11 @@ type Day = {
  */
 type Extra = {
   id: string;
-  kind: "SAUCE" | "TOPPING";
+  kind: "SAUCE" | "TOPPING" | "DRIZZLE";
   name: string;
   pricePence: number;
   warm: "NEVER" | "CHOICE" | "ALWAYS";
+  allergens: string[];
 };
 
 /**
@@ -94,6 +114,8 @@ type Slice = {
   /// The subset of those they've asked to have warmed.
   warmSauceIds: string[];
   toppingIds: string[];
+  /// Poured over the top, after any toppings.
+  drizzleIds: string[];
 };
 type Picks = Record<string, Slice[]>;
 
@@ -228,14 +250,68 @@ function OrderPageInner() {
   const priceOf = (id: string) =>
     extras.find((e) => e.id === id)?.pricePence ?? 0;
 
+  /*
+   * The flavours to show, with any that share a cake kept next to each other.
+   *
+   * They have to be adjacent for the shared heading above them to make sense
+   * — a heading saying "these two share a count" with something else in
+   * between would be worse than no heading at all.
+   */
+  const shownFlavours = (() => {
+    const offered = flavours.filter((f) => {
+      // A one-off special simply isn't on the menu for a date it wasn't made
+      // for.
+      if (!dayIso) return true;
+      const row = stock[dayIso]?.[f.id];
+      return row ? row.offered : true;
+    });
+
+    const groupOf = (f: Flavour) =>
+      dayIso ? stock[dayIso]?.[f.id]?.group?.id : undefined;
+
+    const out: Flavour[] = [];
+    const done = new Set<string>();
+
+    for (const f of offered) {
+      if (done.has(f.id)) continue;
+      const g = groupOf(f);
+
+      if (!g) {
+        out.push(f);
+        done.add(f.id);
+        continue;
+      }
+
+      for (const other of offered) {
+        if (groupOf(other) === g && !done.has(other.id)) {
+          out.push(other);
+          done.add(other.id);
+        }
+      }
+    }
+
+    return out;
+  })();
+
+  /** The shared cake this flavour draws on, if any. */
+  const groupFor = (id: string) =>
+    dayIso ? stock[dayIso]?.[id]?.group : undefined;
+
   /** What one slice costs, including everything added to it. */
   const sliceTotal = (flavourId: string, s: Slice) => {
-    const base = flavours.find((f) => f.id === flavourId)?.pricePence ?? 0;
+    const f = flavours.find((x) => x.id === flavourId);
+    const base = f?.pricePence ?? 0;
     return (
       base +
       (s.extra ? extraSaucePence(s.extra) : 0) +
-      s.sauceIds.reduce((n, id) => n + priceOf(id), 0) +
-      s.toppingIds.reduce((n, id) => n + priceOf(id), 0)
+      // Must match the server: on Create Your Own the first sauce is part of
+      // the slice. A mismatch would show one price and charge another.
+      s.sauceIds.reduce(
+        (n, id, i) => n + (f?.buildYourOwn && i === 0 ? 0 : priceOf(id)),
+        0
+      ) +
+      s.toppingIds.reduce((n, id) => n + priceOf(id), 0) +
+      s.drizzleIds.reduce((n, id) => n + priceOf(id), 0)
     );
   };
 
@@ -279,6 +355,7 @@ function OrderPageInner() {
           sauceIds: [],
           warmSauceIds: [],
           toppingIds: [],
+          drizzleIds: [],
         },
       ],
     });
@@ -317,6 +394,7 @@ function OrderPageInner() {
         addedSauceIds: s.sauceIds,
         warmSauceIds: s.warmSauceIds,
         addedToppingIds: s.toppingIds,
+        addedDrizzleIds: s.drizzleIds,
       }));
     });
     // Everything below is wrapped: a server error returns an HTML page, and
@@ -403,6 +481,12 @@ function OrderPageInner() {
     }
   }
 
+  // A Create Your Own slice with no sauce isn't finished — the server would
+  // refuse it, so say so here rather than at checkout.
+  const unfinished = flavours.some(
+    (f) => f.buildYourOwn && (picks[f.id] ?? []).some((s) => !s.sauceIds.length)
+  );
+
   const missing =
     days?.length === 0 || (days && days.every((d) => d.soldOut))
       ? "Nothing available right now"
@@ -412,7 +496,9 @@ function OrderPageInner() {
           ? "Choose a collection date"
           : count === 0
             ? "Choose your slices"
-            : !allergenOk || !policyOk
+            : unfinished
+              ? "Choose a sauce for Create Your Own"
+              : !allergenOk || !policyOk
               ? "Tick both boxes to continue"
               : null;
 
@@ -535,23 +621,64 @@ function OrderPageInner() {
               </p>
 
               <ul className="space-y-3">
-                {flavours
-                .filter((f) => {
-                  // A one-off special simply isn't on the menu for a date it
-                  // wasn't made for.
-                  if (!dayIso) return true;
-                  const row = stock[dayIso]?.[f.id];
-                  return row ? row.offered : true;
-                })
-                .map((f) => {
+                {shownFlavours.map((f, fi) => {
                   const chosen = picks[f.id] ?? [];
                   const left = leftOf(f.id);
+
+                  // Shown once, above the first of the flavours sharing it.
+                  const group = groupFor(f.id);
+                  const firstOfGroup =
+                    group &&
+                    groupFor(shownFlavours[fi - 1]?.id ?? "")?.id !== group.id;
+                  const sharedCount = group
+                    ? shownFlavours.filter(
+                        (x) => groupFor(x.id)?.id === group.id
+                      ).length
+                    : 0;
                   const soldOut = left !== null && left <= 0;
                   return (
+                    // Keyed fragment: two list items come out of one flavour
+                    // when it's the first of a shared cake.
+                    <Fragment key={f.id}>
+                      {/* One cake, several finishes: the count belongs to the
+                          cake, so it's stated once here rather than repeated
+                          on each flavour as though they were separate. */}
+                      {firstOfGroup && group && (
+                        <li
+                          key={`${group.id}-head`}
+                          className="overflow-hidden rounded-card border border-gold/60 bg-gold-light"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5">
+                            <span className="text-[12px] font-bold uppercase tracking-wide text-gold-hover">
+                              {group.name}
+                            </span>
+                            <span
+                              className={[
+                                "text-[12px] font-bold",
+                                group.left <= 0
+                                  ? "text-bad"
+                                  : group.left <= 5
+                                    ? "text-bad"
+                                    : "text-gold-hover",
+                              ].join(" ")}
+                            >
+                              {group.left <= 0
+                                ? "SOLD OUT"
+                                : `${group.left} slice${group.left === 1 ? "" : "s"} left`}
+                            </span>
+                          </div>
+                          <p className="px-3.5 pb-2.5 text-[12px] leading-snug text-ink2">
+                            The following {sharedCount} flavours share the same
+                            stock count.
+                          </p>
+                        </li>
+                      )}
+
                     <li
                       key={f.id}
                       className={[
-                        "overflow-hidden rounded-card border border-line bg-cream-warm",
+                        "overflow-hidden rounded-card border bg-cream-warm",
+                        group ? "border-gold/40" : "border-line",
                         soldOut ? "opacity-60" : "",
                       ].join(" ")}
                     >
@@ -573,9 +700,23 @@ function OrderPageInner() {
                             {f.description}
                           </p>
                           {soldOut ? (
-                            <p className="mt-1 text-[12px] font-semibold uppercase tracking-wide text-bad">
-                              Sold out
-                            </p>
+                            <>
+                              <p className="mt-1 text-[12px] font-semibold uppercase tracking-wide text-bad">
+                                Sold out
+                              </p>
+                              {/* Only on a sold-out flavour — there's nothing
+                                  to wait for otherwise. */}
+                              <NotifyMe
+                                flavourId={f.id}
+                                flavourName={f.name}
+                                dayIso={dayIso || null}
+                                dayLabel={
+                                  days?.find((d) => d.iso === dayIso)?.label ??
+                                  null
+                                }
+                                defaultEmail={form.email}
+                              />
+                            </>
                           ) : (
                             <>
                               {f.maxPerOrder && (
@@ -671,6 +812,11 @@ function OrderPageInner() {
                                 (e) =>
                                   e.kind === "TOPPING" &&
                                   f.toppingIds.includes(e.id)
+                              );
+                              const drizzles = extras.filter(
+                                (e) =>
+                                  e.kind === "DRIZZLE" &&
+                                  f.drizzleIds.includes(e.id)
                               );
 
                               return (
@@ -798,6 +944,21 @@ function OrderPageInner() {
                                     </div>
                                   )}
 
+                                  {/* Create Your Own builds the slice in
+                                      steps; every other flavour uses the
+                                      usual sauce and topping pickers. */}
+                                  {f.buildYourOwn ? (
+                                    <BuildYourOwn
+                                      flavour={f}
+                                      sauces={sauces}
+                                      tops={tops}
+                                      drizzles={drizzles}
+                                      slice={slice}
+                                      where={where}
+                                      onChange={(patch) => setSlice(f.id, i, patch)}
+                                    />
+                                  ) : (
+                                    <>
                                   {/* sauces — same shape as the toppings
                                       below, since a slice can take more than
                                       one where the flavour allows it */}
@@ -818,12 +979,12 @@ function OrderPageInner() {
                                           className="h-4 w-4 accent-gold"
                                         />
                                         Add sauce
-                                        {Math.min(f.maxSauces, sauces.length) >
+                                        {Math.min((f.maxSauces || Infinity), sauces.length) >
                                           1 && (
                                           <span className="text-[11px] text-ink2">
                                             up to{" "}
                                             {Math.min(
-                                              f.maxSauces,
+                                              (f.maxSauces || Infinity),
                                               sauces.length
                                             )}
                                           </span>
@@ -835,7 +996,7 @@ function OrderPageInner() {
                                           className={[
                                             "mt-1.5 grid gap-2",
                                             Math.min(
-                                              f.maxSauces,
+                                              (f.maxSauces || Infinity),
                                               sauces.length
                                             ) > 1
                                               ? "grid-cols-2"
@@ -847,7 +1008,7 @@ function OrderPageInner() {
                                           {Array.from(
                                             {
                                               length: Math.min(
-                                                f.maxSauces,
+                                                (f.maxSauces || Infinity),
                                                 sauces.length
                                               ),
                                             },
@@ -964,6 +1125,74 @@ function OrderPageInner() {
                                     </div>
                                   )}
 
+                                  {/* Drizzles go over whatever's already on
+                                      the slice, so they sit after the
+                                      toppings and read as a separate choice
+                                      rather than another sauce. */}
+                                  {drizzles.length > 0 && (
+                                    <div className="mt-2.5">
+                                      <p className="text-[13px] font-semibold text-ink">
+                                        Sauce drizzle
+                                        {(f.maxDrizzles || Infinity) > 1
+                                          ? "s"
+                                          : ""}
+                                      </p>
+                                      <p className="mb-1.5 text-[11px] text-ink2">
+                                        Over the top
+                                        {f.maxDrizzles > 0
+                                          ? ` — up to ${f.maxDrizzles}`
+                                          : ""}
+                                      </p>
+
+                                      <div className="space-y-1.5">
+                                        {drizzles.map((e) => {
+                                          const on = slice.drizzleIds.includes(
+                                            e.id
+                                          );
+                                          const full =
+                                            !on &&
+                                            f.maxDrizzles > 0 &&
+                                            slice.drizzleIds.length >=
+                                              f.maxDrizzles;
+                                          return (
+                                            <label
+                                              key={e.id}
+                                              className={[
+                                                "flex cursor-pointer items-center gap-2.5 text-[13px] text-ink",
+                                                full ? "opacity-40" : "",
+                                              ].join(" ")}
+                                            >
+                                              <input
+                                                type="checkbox"
+                                                checked={on}
+                                                disabled={full}
+                                                onChange={() =>
+                                                  setSlice(f.id, i, {
+                                                    drizzleIds: on
+                                                      ? slice.drizzleIds.filter(
+                                                          (x) => x !== e.id
+                                                        )
+                                                      : [
+                                                          ...slice.drizzleIds,
+                                                          e.id,
+                                                        ],
+                                                  })
+                                                }
+                                                className="h-4 w-4 accent-gold"
+                                              />
+                                              <span className="grow">
+                                                {e.name}
+                                              </span>
+                                              <span className="text-[12px] text-ink2">
+                                                +{money(e.pricePence)}
+                                              </span>
+                                            </label>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  )}
+
                                   {/* toppings, side by side */}
                                   {tops.length > 0 && (
                                     <div className="mt-2.5">
@@ -982,7 +1211,7 @@ function OrderPageInner() {
                                         />
                                         Add toppings
                                         <span className="text-[11px] text-ink2">
-                                          up to {Math.min(f.maxToppings, tops.length)}
+                                          up to {Math.min((f.maxToppings || Infinity), tops.length)}
                                         </span>
                                       </label>
 
@@ -993,7 +1222,7 @@ function OrderPageInner() {
                                           {Array.from(
                                             {
                                               length: Math.min(
-                                                f.maxToppings,
+                                                (f.maxToppings || Infinity),
                                                 tops.length
                                               ),
                                             },
@@ -1059,12 +1288,15 @@ function OrderPageInner() {
                                       )}
                                     </div>
                                   )}
+                                    </>
+                                  )}
                                 </div>
                               );
                             })}
                           </div>
                         )}
                     </li>
+                    </Fragment>
                   );
                 })}
               </ul>
@@ -1073,6 +1305,14 @@ function OrderPageInner() {
             {/* 4 — review and pay */}
             <Card>
               <StepTitle n={4}>Review &amp; Pay</StepTitle>
+
+              {/* Directly above the tick boxes, so it's the last thing read
+                  before agreeing. */}
+              <SelectionAllergens
+                flavours={flavours}
+                extras={extras}
+                picks={picks}
+              />
 
               <label className="flex gap-3 rounded-card border border-line bg-cream-warm px-4 py-3 text-[13px] leading-relaxed text-ink2">
                 <input
@@ -1405,5 +1645,393 @@ function Field({
         className="w-full rounded-btn border border-field bg-paper px-4 py-3 text-[15px] text-ink placeholder:text-muted focus:border-gold focus:outline-none focus:ring-4 focus:ring-gold/15"
       />
     </label>
+  );
+}
+
+
+/**
+ * Create Your Own, built one step at a time.
+ *
+ * Sauce first, because the slice is built on it and one is required. Only
+ * then do the toppings open — someone scrolling past a wall of toppings
+ * before they've picked a sauce is the thing this avoids.
+ *
+ * Tick lists rather than dropdowns: with no limit on toppings, a dropdown
+ * per topping would be unusable on a phone. Each option shows its own
+ * allergens, so the combined list at checkout loses nothing.
+ */
+function BuildYourOwn({
+  flavour,
+  sauces,
+  tops,
+  drizzles,
+  slice,
+  where,
+  onChange,
+}: {
+  flavour: Flavour;
+  sauces: Extra[];
+  tops: Extra[];
+  drizzles: Extra[];
+  slice: Slice;
+  where: string;
+  onChange: (patch: Partial<Slice>) => void;
+}) {
+  // Straight to toppings when coming back to a slice that already has a
+  // sauce, so re-opening it doesn't lose their place.
+  const [step, setStep] = useState<1 | 2>(slice.sauceIds.length ? 2 : 1);
+
+  const sauceLimit = flavour.maxSauces > 0 ? flavour.maxSauces : Infinity;
+  const toppingLimit = flavour.maxToppings > 0 ? flavour.maxToppings : Infinity;
+  const drizzleLimit = flavour.maxDrizzles > 0 ? flavour.maxDrizzles : Infinity;
+
+  const toggle = (
+    list: string[],
+    id: string,
+    limit: number
+  ): string[] =>
+    list.includes(id)
+      ? list.filter((x) => x !== id)
+      : list.length >= limit
+        ? list
+        : [...list, id];
+
+  const label = (e: Extra) =>
+    e.allergens?.length
+      ? e.allergens.map((a) => allergenLabel(a)).join(", ")
+      : null;
+
+  const Option = ({
+    e,
+    on,
+    locked,
+    note,
+    onClick,
+  }: {
+    e: Extra;
+    on: boolean;
+    locked: boolean;
+    note: string;
+    onClick: () => void;
+  }) => (
+    <button
+      onClick={onClick}
+      disabled={locked}
+      className={[
+        "flex w-full items-start gap-2.5 rounded-btn border px-3 py-2.5 text-left transition-colors",
+        on
+          ? "border-navy bg-navy/5"
+          : "border-field bg-paper hover:bg-cream-warm",
+        locked ? "opacity-40" : "",
+      ].join(" ")}
+    >
+      <span
+        className={[
+          "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 text-[10px] text-white",
+          on ? "border-navy bg-navy" : "border-field",
+        ].join(" ")}
+      >
+        {on ? "✓" : ""}
+      </span>
+      <span className="grow">
+        <span className="block text-[14px] text-ink">{e.name}</span>
+        {label(e) && (
+          <span className="block text-[11px] text-ink2">
+            Contains: {label(e)}
+          </span>
+        )}
+      </span>
+      <span className="shrink-0 text-[12px] text-ink2">{note}</span>
+    </button>
+  );
+
+  return (
+    <div className="mt-2.5">
+      <div className="mb-3 grid grid-cols-2 gap-1.5">
+        <button
+          onClick={() => setStep(1)}
+          className={[
+            "rounded-btn py-2 text-[11px] font-bold uppercase tracking-wide",
+            step === 1
+              ? "bg-navy text-white"
+              : "bg-good-light text-good",
+          ].join(" ")}
+        >
+          {step === 1 ? "1 · Sauce" : "✓ Sauce"}
+        </button>
+        <span
+          className={[
+            "rounded-btn py-2 text-center text-[11px] font-bold uppercase tracking-wide",
+            step === 2 ? "bg-navy text-white" : "bg-cream-beige text-muted",
+          ].join(" ")}
+        >
+          2 · Toppings
+        </span>
+      </div>
+
+      {step === 1 ? (
+        <>
+          <p className="text-[13px] font-semibold text-ink">
+            Choose your sauce
+          </p>
+          <p className="mb-2 text-[12px] text-ink2">
+            At least one
+            {Number.isFinite(sauceLimit) ? `, up to ${sauceLimit}` : ""}
+          </p>
+
+          <div className="space-y-1.5">
+            {sauces.map((e) => {
+              const on = slice.sauceIds.includes(e.id);
+              const isFirst = slice.sauceIds[0] === e.id;
+              const locked = !on && slice.sauceIds.length >= sauceLimit;
+              return (
+                <Option
+                  key={e.id}
+                  e={e}
+                  on={on}
+                  locked={locked}
+                  // The first sauce is part of the slice, so only the
+                  // second is charged.
+                  note={
+                    isFirst || (!on && slice.sauceIds.length === 0)
+                      ? "included"
+                      : `+${money(e.pricePence)}`
+                  }
+                  onClick={() => {
+                    const next = toggle(slice.sauceIds, e.id, sauceLimit);
+                    onChange({
+                      sauceIds: next,
+                      warmSauceIds: slice.warmSauceIds.filter((x) =>
+                        next.includes(x)
+                      ),
+                    });
+                  }}
+                />
+              );
+            })}
+          </div>
+
+          <button
+            onClick={() => setStep(2)}
+            disabled={slice.sauceIds.length === 0}
+            className="mt-3 w-full rounded-btn bg-navy py-3 text-[14px] font-bold text-white transition-colors disabled:bg-cream-beige disabled:text-muted"
+          >
+            {slice.sauceIds.length === 0
+              ? "Choose a sauce to continue"
+              : "Next: toppings →"}
+          </button>
+        </>
+      ) : (
+        <>
+          <div className="mb-3 flex flex-wrap gap-1.5">
+            {slice.sauceIds.map((id) => {
+              const e = sauces.find((x) => x.id === id);
+              return e ? (
+                <span
+                  key={id}
+                  className="rounded-full bg-navy px-2.5 py-1 text-[12px] text-white"
+                >
+                  {e.name}
+                </span>
+              ) : null;
+            })}
+          </div>
+
+          <p className="text-[13px] font-semibold text-ink">Add toppings</p>
+          <p className="mb-2 text-[12px] text-ink2">
+            Optional
+            {Number.isFinite(toppingLimit)
+              ? ` — up to ${toppingLimit}`
+              : " — add as many as you like"}
+          </p>
+
+          <div className="space-y-1.5">
+            {tops.map((e) => {
+              const on = slice.toppingIds.includes(e.id);
+              const locked = !on && slice.toppingIds.length >= toppingLimit;
+              return (
+                <Option
+                  key={e.id}
+                  e={e}
+                  on={on}
+                  locked={locked}
+                  note={`+${money(e.pricePence)}`}
+                  onClick={() =>
+                    onChange({
+                      toppingIds: toggle(slice.toppingIds, e.id, toppingLimit),
+                    })
+                  }
+                />
+              );
+            })}
+            {tops.length === 0 && (
+              <p className="text-[12px] text-muted">No toppings offered.</p>
+            )}
+          </div>
+
+          {/* Same step as toppings: a drizzle goes over them, so choosing
+              both together is how you'd actually describe it. */}
+          {drizzles.length > 0 && (
+            <>
+              <p className="mt-4 text-[13px] font-semibold text-ink">
+                Sauce drizzle over the top
+              </p>
+              <p className="mb-2 text-[12px] text-ink2">
+                Optional
+                {drizzleLimit !== Infinity ? ` — up to ${drizzleLimit}` : ""}
+              </p>
+
+              <div className="space-y-1.5">
+                {drizzles.map((e) => {
+                  const on = slice.drizzleIds.includes(e.id);
+                  const locked =
+                    !on && slice.drizzleIds.length >= drizzleLimit;
+                  return (
+                    <Option
+                      key={e.id}
+                      e={e}
+                      on={on}
+                      locked={locked}
+                      note={`+${money(e.pricePence)}`}
+                      onClick={() =>
+                        onChange({
+                          drizzleIds: toggle(
+                            slice.drizzleIds,
+                            e.id,
+                            drizzleLimit
+                          ),
+                        })
+                      }
+                    />
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          {(slice.toppingIds.length > 0 || slice.drizzleIds.length > 0) && (
+            <p className="mt-2 text-[11px] text-ink2">Going {where}.</p>
+          )}
+
+          <button
+            onClick={() => setStep(1)}
+            className="mt-2 text-[12px] font-semibold text-gold-hover underline underline-offset-4"
+          >
+            ← Change sauce
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+
+/**
+ * Every allergen in what they've chosen, before they tick to agree.
+ *
+ * A normal flavour lists separately from anything added to it, so it's clear
+ * what an addition brought. Create Your Own is one thing they built, so its
+ * sauces and toppings fold into a single entry under its name.
+ */
+function SelectionAllergens({
+  flavours,
+  extras,
+  picks,
+}: {
+  flavours: Flavour[];
+  extras: Extra[];
+  picks: Picks;
+}) {
+  const find = (id: string) => extras.find((e) => e.id === id);
+
+  const rows = new Map<
+    string,
+    { name: string; kind: string; allergens: Set<string> }
+  >();
+  const add = (key: string, name: string, kind: string, list: string[] = []) => {
+    const row = rows.get(key) ?? { name, kind, allergens: new Set<string>() };
+    list.forEach((a) => row.allergens.add(a));
+    rows.set(key, row);
+  };
+
+  for (const f of flavours) {
+    const slices = picks[f.id] ?? [];
+    if (!slices.length) continue;
+
+    for (const sl of slices) {
+      const sauces = sl.sauceIds.map(find).filter(Boolean) as Extra[];
+      const toppings = sl.toppingIds.map(find).filter(Boolean) as Extra[];
+      const drizzles = sl.drizzleIds.map(find).filter(Boolean) as Extra[];
+
+      if (f.buildYourOwn) {
+        add(`f:${f.id}`, f.name, "Flavour", [
+          ...f.allergens,
+          ...sauces.flatMap((e) => e.allergens ?? []),
+          ...toppings.flatMap((e) => e.allergens ?? []),
+          ...drizzles.flatMap((e) => e.allergens ?? []),
+        ]);
+        continue;
+      }
+
+      add(`f:${f.id}`, f.name, "Flavour", f.allergens);
+      for (const e of sauces) add(`e:${e.id}`, e.name, "Sauce", e.allergens);
+      for (const e of toppings) add(`e:${e.id}`, e.name, "Topping", e.allergens);
+      for (const e of drizzles) add(`e:${e.id}`, e.name, "Drizzle", e.allergens);
+    }
+  }
+
+  if (!rows.size) return null;
+
+  const list = [...rows.values()];
+  const everything = [...new Set(list.flatMap((r) => [...r.allergens]))].sort();
+
+  return (
+    <div className="mb-4 overflow-hidden rounded-card border-2 border-bad bg-paper">
+      <p className="bg-bad px-4 py-2.5 text-[13px] font-extrabold uppercase leading-snug tracking-wide text-white">
+        ⚠ Please read all the allergens for your selection below
+      </p>
+
+      <div className="px-4 py-3">
+        <ul className="divide-y divide-bad/10">
+          {list.map((r) => (
+            <li key={r.name + r.kind} className="py-2">
+              <p className="text-[14px] font-bold text-ink">
+                {r.name}
+                <span className="ml-2 text-[10px] font-semibold uppercase tracking-wider text-muted">
+                  {r.kind}
+                </span>
+              </p>
+              {r.allergens.size ? (
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {[...r.allergens].sort().map((a) => (
+                    <span
+                      key={a}
+                      className="rounded bg-bad-light px-1.5 py-0.5 text-[12px] font-semibold text-bad"
+                    >
+                      {allergenLabel(a)}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-0.5 text-[12px] italic text-muted">
+                  No allergens listed
+                </p>
+              )}
+            </li>
+          ))}
+        </ul>
+
+        {everything.length > 0 && (
+          <div className="mt-3 rounded-btn bg-bad-light px-3 py-2.5">
+            <p className="text-[11px] font-extrabold uppercase tracking-wider text-bad">
+              Your order contains
+            </p>
+            <p className="mt-0.5 text-[14px] font-bold text-ink">
+              {everything.map((a) => allergenLabel(a)).join(", ")}
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

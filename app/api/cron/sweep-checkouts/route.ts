@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { db } from "@/lib/stock";
 import { OrderStatus } from "@prisma/client";
+import { runStockAlerts } from "@/lib/alerts";
 
 export const dynamic = "force-dynamic";
 
@@ -90,6 +91,9 @@ export async function GET(req: Request) {
       console.error(`Sweep failed for ${order.orderNo}`, e);
     }
   }
+
+  // A released hold puts slices back.
+  if (released) await runStockAlerts();
 
   return NextResponse.json({ checked: stale.length, released, recovered });
 }

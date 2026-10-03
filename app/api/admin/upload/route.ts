@@ -34,9 +34,18 @@ export async function POST(req: Request) {
       { status: 413 }
     );
 
+  /*
+   * iPhone screenshots are PNG, so they upload as they are. A photo from the
+   * camera is HEIC, which browsers can't display — Safari usually converts
+   * on upload, but not always, so it's refused with a clear reason rather
+   * than stored as something nothing can open.
+   */
   if (!["image/png", "image/jpeg", "image/webp"].includes(file.type))
     return NextResponse.json(
-      { error: "PNG, JPG or WebP only." },
+      {
+        error:
+          "PNG, JPG or WebP only. iPhone screenshots are PNG and upload as they are; a camera photo may be HEIC and need converting.",
+      },
       { status: 415 }
     );
 

@@ -19,9 +19,12 @@ async function findByToken(token: string) {
       kind: "SLICE" as const,
       responded: slice.surveyResponded,
       forDate: slice.day,
-      flavours: flavoursFromSlices(
-        slice.slices as unknown as { flavour: string }[]
-      ),
+      /*
+       * Slice surveys offer the core menu rather than what was ordered, so
+       * the by-flavour breakdown stays comparable week to week. A special
+       * goes in under "Other" with a note.
+       */
+      flavours: [],
       update: (data: { surveyResponded: boolean }) =>
         db.order.update({ where: { id: slice.id }, data }),
     };
@@ -79,8 +82,15 @@ export async function POST(req: Request) {
   if (!order)
     return NextResponse.json({ error: "Link not found" }, { status: 404 });
 
-  // Only what they actually ordered, whatever was submitted.
-  const flavours = (b.flavours ?? []).filter((f) => order.flavours.includes(f));
+  /*
+   * A whole-cake survey offers exactly what was ordered, so the answer is
+   * checked against it. A slice survey offers the fixed core list plus
+   * "Other", so there's nothing to check it against — it's trimmed instead.
+   */
+  const flavours =
+    order.kind === "WHOLE"
+      ? (b.flavours ?? []).filter((f) => order.flavours.includes(f))
+      : (b.flavours ?? []).slice(0, 10).map((f) => f.slice(0, 60));
 
   await db.feedback.create({
     data: {

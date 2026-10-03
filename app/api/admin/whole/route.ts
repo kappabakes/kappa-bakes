@@ -5,6 +5,13 @@ import { collectionAddress } from "@/lib/settings";
 import { ALLERGEN_NOTICE, DEPOSIT_TERMS } from "@/lib/config";
 import { normaliseItem, ukWallTimeToUtc, WholeItem } from "@/lib/whole";
 import { notifyWhole } from "@/lib/notify-whole";
+import {
+  buildCollectedEmail,
+  buildCancelledEmail,
+  buildChaseEmail,
+  refundLine,
+  sendStatusEmail,
+} from "@/lib/notify-status";
 import { WholeStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -185,11 +192,25 @@ export async function PATCH(req: Request) {
     status?: "CONFIRMED" | "COLLECTED" | "CANCELLED";
     cancelReason?: string;
     cancelNote?: string;
+    sendEmail?: boolean;
+    refund?: "NONE" | "FULL" | "PARTIAL" | "NOTHING_PAID";
+    refundPence?: number;
+    /// Not a status change: a nudge when they haven't turned up.
+    chase?: boolean;
   };
 
   const existing = await db.wholeOrder.findUnique({ where: { id: b.id } });
   if (!existing)
     return NextResponse.json({ error: "No such order." }, { status: 404 });
+
+  // A chase leaves the order exactly as it is — it's a message, not a status.
+  if (b.chase) {
+    const status = await sendStatusEmail(
+      existing.email,
+      buildChaseEmail(existing.firstName)
+    );
+    return NextResponse.json({ ok: true, emailStatus: status });
+  }
 
   const order = await db.wholeOrder.update({
     where: { id: b.id },
@@ -205,6 +226,30 @@ export async function PATCH(req: Request) {
         : {}),
     },
   });
+
+  /*
+   * Collected goes out on its own. A cancellation only when you ask —
+   * whether to tell someone depends on why it was cancelled.
+   */
+  if (b.status === "COLLECTED" && existing.status !== "COLLECTED")
+    await sendStatusEmail(order.email, buildCollectedEmail(order.firstName));
+
+  if (b.status === "CANCELLED" && b.sendEmail)
+    await sendStatusEmail(
+      order.email,
+      buildCancelledEmail(
+        order.firstName,
+        refundLine(
+          b.refund ?? "NONE",
+          // What they've actually handed over so far is the deposit.
+          order.depositPence,
+          b.refundPence,
+          order.depositPence
+        ),
+        undefined,
+        true
+      )
+    );
 
   return NextResponse.json({ ok: true, order });
 }

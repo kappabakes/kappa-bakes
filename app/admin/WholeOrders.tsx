@@ -9,6 +9,8 @@ import {
   utcToUkWallTime,
 } from "@/lib/whole";
 import { Btn, Card, Field, PageHead, readError, adminBase } from "./ui";
+import { ProofImages } from "./ProofImages";
+import { CancelDialog, CancelResult } from "./CancelDialog";
 
 type Order = {
   id: string;
@@ -29,6 +31,8 @@ type Order = {
   depositTermsAt: string | null;
   cancelReason: string | null;
   cancelNote: string | null;
+  cancelProof: string[];
+  orderProof: string[];
 };
 
 const stamp = (iso: string) =>
@@ -60,6 +64,7 @@ export function WholeOrders({
   const [q, setQ] = useState("");
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Order | null>(null);
+  const [cancelling, setCancelling] = useState<Order | null>(null);
   const [flavours, setFlavours] = useState<string[]>([]);
 
   const load = useCallback(
@@ -94,26 +99,50 @@ export function WholeOrders({
       .catch(() => {});
   }, [load]);
 
-  async function setStatus(o: Order, status: Order["status"]) {
-    let cancelReason: string | undefined;
-    let cancelNote: string | undefined;
+  /** Cancelling goes through the dialog; everything else is a direct change. */
+  async function setStatus(
+    o: Order,
+    status: Order["status"],
+    cancel?: CancelResult
+  ) {
+    const r = await fetch("/api/admin/whole", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: o.id,
+        status,
+        cancelReason: cancel?.reason,
+        cancelNote: cancel?.note,
+        sendEmail: cancel?.sendEmail,
+        refund: cancel?.refund,
+        refundPence: cancel?.refundPence,
+      }),
+    });
+    if (!r.ok) return flash(await readError(r));
+    flash(
+      status === "COLLECTED"
+        ? "Marked collected — email sent"
+        : status === "CANCELLED"
+          ? cancel?.sendEmail
+            ? "Cancelled — email sent"
+            : "Cancelled"
+          : "Updated"
+    );
+    load(q);
+  }
 
-    if (status === "CANCELLED") {
-      const byCustomer = confirm(
-        `Cancel ${o.firstName} ${o.lastName}'s order?\n\nOK for "requested by the customer", Cancel to give another reason.`
-      );
-      cancelReason = byCustomer ? "CUSTOMER" : "OTHER";
-      cancelNote = prompt("Anything to note? (optional)") ?? undefined;
-    }
+  /** A nudge when they haven't turned up. Doesn't change the order. */
+  async function chase(o: Order) {
+    if (!confirm(`Send ${o.firstName} a reminder that the order is waiting?`))
+      return;
 
     const r = await fetch("/api/admin/whole", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: o.id, status, cancelReason, cancelNote }),
+      body: JSON.stringify({ id: o.id, chase: true }),
     });
     if (!r.ok) return flash(await readError(r));
-    flash("Updated");
-    load(q);
+    flash("Chase sent");
   }
 
   return (
@@ -237,12 +266,29 @@ export function WholeOrders({
               )}
 
               {o.status === "CANCELLED" && (
-                <p className="mt-2 rounded-card border border-bad/30 bg-bad-light px-3 py-2 text-[13px] text-ink">
-                  {o.cancelReason === "CUSTOMER"
-                    ? "Cancelled at the customer's request."
-                    : "Cancelled."}
-                  {o.cancelNote && ` ${o.cancelNote}`}
-                </p>
+                <div className="mt-2 rounded-card border border-bad/30 bg-bad-light px-3 py-2 text-[13px] text-ink">
+                  <p>
+                    {o.cancelReason === "CUSTOMER"
+                      ? "Cancelled at the customer's request."
+                      : "Cancelled."}
+                    {o.cancelNote && ` ${o.cancelNote}`}
+                  </p>
+
+                  <ProofImages
+                    id={o.id}
+                    kind="WHOLE"
+                    field="cancelProof"
+                    proof={o.cancelProof ?? []}
+                    onChange={(next) =>
+                      setOrders(
+                        (orders ?? []).map((x) =>
+                          x.id === o.id ? { ...x, cancelProof: next } : x
+                        )
+                      )
+                    }
+                    flash={flash}
+                  />
+                </div>
               )}
 
               <p className="mt-2 text-[12px] text-muted">
@@ -250,6 +296,25 @@ export function WholeOrders({
                 {o.allergensDiscussedAt && " · allergens discussed"}
                 {o.depositTermsAt && " · deposit terms explained"}
               </p>
+
+              {/* The messages the order was agreed in. */}
+              <p className="mt-3 text-[11px] font-bold uppercase tracking-wider text-gold-hover">
+                Order proof
+              </p>
+              <ProofImages
+                id={o.id}
+                kind="WHOLE"
+                field="orderProof"
+                proof={o.orderProof ?? []}
+                onChange={(next) =>
+                  setOrders(
+                    (orders ?? []).map((x) =>
+                      x.id === o.id ? { ...x, orderProof: next } : x
+                    )
+                  )
+                }
+                flash={flash}
+              />
 
               <div className="mt-3 flex flex-wrap gap-2">
                 {o.status !== "COLLECTED" && o.status !== "CANCELLED" && (
@@ -267,7 +332,13 @@ export function WholeOrders({
                       Edit
                     </button>
                     <button
-                      onClick={() => setStatus(o, "CANCELLED")}
+                      onClick={() => chase(o)}
+                      className="rounded-btn border border-navy bg-paper px-3 py-1.5 text-xs font-semibold text-navy"
+                    >
+                      Chase
+                    </button>
+                    <button
+                      onClick={() => setCancelling(o)}
                       className="rounded-btn border border-navy bg-bad px-3 py-1.5 text-xs font-semibold text-white"
                     >
                       Cancel
@@ -310,6 +381,20 @@ export function WholeOrders({
           );
         })}
       </ul>
+
+      {cancelling && (
+        <CancelDialog
+          who={cancelling.firstName}
+          paidPence={cancelling.depositPence}
+          isDeposit
+          onClose={() => setCancelling(null)}
+          onConfirm={(r) => {
+            const o = cancelling;
+            setCancelling(null);
+            setStatus(o, "CANCELLED", r);
+          }}
+        />
+      )}
 
       {(adding || editing) && (
         <WholeForm
@@ -596,6 +681,27 @@ function WholeForm({
             className="w-full rounded-btn border border-field bg-paper px-3.5 py-2.5 text-[15px] text-ink"
           />
         </label>
+
+        {/* Only once the order exists — there's nothing to attach an upload
+            to until then, so a new order offers it on the next save. */}
+        {order && (
+          <div className="mt-4">
+            <span className="mb-1 block text-[13px] font-semibold text-ink">
+              Order proof
+            </span>
+            <span className="block text-[12px] text-ink2">
+              Screenshots of the messages this order was agreed in.
+            </span>
+            <ProofImages
+              id={order.id}
+              kind="WHOLE"
+              field="orderProof"
+              proof={order.orderProof ?? []}
+              onChange={() => {}}
+              flash={flash}
+            />
+          </div>
+        )}
 
         <label className="mt-4 flex items-start gap-3 text-[15px] text-ink">
           <input

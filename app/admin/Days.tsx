@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { WEEKDAYS } from "@/lib/config";
 import { Btn, Card, PageHead, Field, Tag, readError } from "./ui";
+import { ukWallTimeToUtc, utcToUkWallTime } from "@/lib/whole";
+import { GroupShares } from "./GroupShares";
 
 type Day = {
   iso: string;
@@ -24,6 +26,22 @@ type Day = {
   outstanding: number;
   held: number;
   fromSlot: string | null;
+  /// Shared cakes on this date, so one can be divided between its flavours.
+  groups?: {
+    id: string;
+    name: string;
+    stock: number;
+    rows: {
+      flavourId: string;
+      name: string;
+      sold: number;
+      cap: number | null;
+      groupLeft: number;
+    }[];
+  }[];
+  /// Which rule is actually limiting each flavour, so a number that looks
+  /// wrong explains itself.
+  limits?: { flavourId: string; limit: string; left: number; of: number }[];
 };
 type Slot = {
   weekday: number;
@@ -34,11 +52,14 @@ type Slot = {
 };
 
 /** datetime-local wants "YYYY-MM-DDTHH:mm" in the browser's own timezone. */
+/**
+ * The stored moment, shown as the UK wall time it represents — so what you
+ * read back is what you typed, whatever your device's clock is set to.
+ */
 const forInput = (iso: string | null) => {
   if (!iso) return "";
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const { date, time } = utcToUkWallTime(iso);
+  return `${date}T${time}`;
 };
 
 export function DaysManager({ flash }: { flash: (m: string) => void }) {
@@ -317,12 +338,12 @@ export function DaysManager({ flash }: { flash: (m: string) => void }) {
                 value={String(s.capacity)}
                 onCommit={(v) => saveSlot(s.weekday, { capacity: Number(v) || 0 })}
               />
-              <Commit
+              <TimeField
                 label="From"
                 value={s.startTime}
                 onCommit={(v) => saveSlot(s.weekday, { startTime: v })}
               />
-              <Commit
+              <TimeField
                 label="Until"
                 value={s.endTime}
                 onCommit={(v) => saveSlot(s.weekday, { endTime: v })}
@@ -422,12 +443,24 @@ export function DaysManager({ flash }: { flash: (m: string) => void }) {
                   saveDay(d.iso, { maxPerOrder: v ? Number(v) : null })
                 }
               />
-              <Commit
+              {d.groups?.map((g) => (
+                <GroupShares
+                  key={g.id}
+                  dayIso={d.iso}
+                  groupName={g.name}
+                  groupStock={g.stock}
+                  rows={g.rows}
+                  onSaved={load}
+                  flash={flash}
+                />
+              ))}
+
+              <TimeField
                 label="From"
                 value={d.startTime}
                 onCommit={(v) => saveDay(d.iso, { startTime: v })}
               />
-              <Commit
+              <TimeField
                 label="Until"
                 value={d.endTime}
                 onCommit={(v) => saveDay(d.iso, { endTime: v })}
@@ -436,7 +469,10 @@ export function DaysManager({ flash }: { flash: (m: string) => void }) {
                 value={forInput(d.cutoffIso)}
                 onCommit={(v) =>
                   saveDay(d.iso, {
-                    cutoffIso: v ? new Date(v).toISOString() : null,
+                    // Read as UK time, not this device's. Typing 6pm means
+                    // 6pm in Batley whether you're there or not — and the
+                    // right side of the clocks changing for that date.
+                    cutoffIso: v ? ukInputToIso(v) : null,
                   })
                 }
               />
@@ -817,4 +853,66 @@ function StockBox({
       className="w-24 rounded-btn border border-field bg-paper px-3 py-2 text-[15px] text-ink placeholder:text-muted focus:border-gold focus:outline-none"
     />
   );
+}
+
+
+/**
+ * A time picker that stores the readable form.
+ *
+ * The browser's own time control is a scroll wheel on a phone rather than
+ * something to type, but it speaks 24-hour "14:00". Everything downstream
+ * expects "2:00 PM", so it's converted at this boundary and nowhere else.
+ */
+function TimeField({
+  label,
+  value,
+  onCommit,
+}: {
+  label: string;
+  value: string;
+  onCommit: (v: string) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-[13px] font-semibold text-ink">
+        {label}
+      </span>
+      <input
+        type="time"
+        value={to24(value)}
+        onChange={(e) => e.target.value && onCommit(to12(e.target.value))}
+        className="w-full rounded-btn border border-field bg-paper px-3 py-2.5 text-[15px] text-ink focus:border-gold focus:outline-none"
+      />
+    </label>
+  );
+}
+
+/**
+ * "2026-09-26T18:00" as typed → the moment that is in the UK.
+ *
+ * Left to the browser this was read in the device's own time zone, so a
+ * cut-off set while abroad would have been an hour or more out. Built this
+ * way it also lands correctly either side of the clocks changing.
+ */
+function ukInputToIso(v: string) {
+  const [date, time] = v.split("T");
+  return ukWallTimeToUtc(date, time.slice(0, 5)).toISOString();
+}
+
+/** "2:00 PM" → "14:00". Anything unexpected is left alone. */
+function to24(v: string) {
+  const m = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec(v.trim());
+  if (!m) return /^\d{2}:\d{2}$/.test(v.trim()) ? v.trim() : "";
+
+  let h = Number(m[1]) % 12;
+  if (m[3].toUpperCase() === "PM") h += 12;
+  return `${String(h).padStart(2, "0")}:${m[2]}`;
+}
+
+/** "14:00" → "2:00 PM", the form the rest of the system reads. */
+function to12(v: string) {
+  const [hh, mm] = v.split(":").map(Number);
+  const suffix = hh >= 12 ? "PM" : "AM";
+  const h = hh % 12 === 0 ? 12 : hh % 12;
+  return `${h}:${String(mm).padStart(2, "0")} ${suffix}`;
 }

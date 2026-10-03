@@ -48,7 +48,7 @@ const FAQS: QA[] = [
   {
     q: "Do I need to let you know when I'm on my way?",
     a: [
-      "If your toppings are being added on collection, yes please — message us on WhatsApp when you're 2-3 minutes away so we can put them on fresh.",
+      "If your toppings are being added on collection, yes please — message us on WhatsApp when you're 5 minutes away so we can put them on fresh.",
       "Toppings added too early start to slide, so a couple of minutes' notice means they look right when you get home.",
       "If you've chosen your toppings in a tub, there's no need — just arrive within your slot.",
     ],

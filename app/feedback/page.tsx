@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { SOCIALS, whatsappLink } from "@/lib/config";
+import { SOCIALS, whatsappLink, CORE_FLAVOURS } from "@/lib/config";
 import { RATINGS, isHappy } from "@/lib/survey";
 import type { FeedbackScore } from "@prisma/client";
 
@@ -30,6 +30,10 @@ function Feedback() {
 
   const [flavours, setFlavours] = useState<string[]>([]);
   const [picked, setPicked] = useState<string[]>([]);
+  /// Slice orders offer the core list plus "Other", for a special.
+  const [other, setOther] = useState(false);
+  const [otherText, setOtherText] = useState("");
+  const [kind, setKind] = useState<"SLICE" | "WHOLE">("SLICE");
   const [comment, setComment] = useState("");
   const [state, setState] = useState<"loading" | "ready" | "done" | "gone">(
     "loading"
@@ -45,9 +49,16 @@ function Feedback() {
     fetch(`/api/feedback?t=${encodeURIComponent(token)}`)
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((d) => {
-        setFlavours(d.flavours ?? []);
-        // Only one flavour? Then we already know, and there's nothing to ask.
-        if ((d.flavours ?? []).length === 1) setPicked(d.flavours);
+        setKind(d.kind);
+
+        if (d.kind === "WHOLE") {
+          setFlavours(d.flavours ?? []);
+          // One flavour? Then we already know, and there's nothing to ask.
+          if ((d.flavours ?? []).length === 1) setPicked(d.flavours);
+        } else {
+          setFlavours([...CORE_FLAVOURS]);
+        }
+
         setState("ready");
       })
       .catch(() => setState("gone"));
@@ -59,7 +70,15 @@ function Feedback() {
     await fetch("/api/feedback", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token, rating, flavours: picked, comment }),
+      body: JSON.stringify({
+        token,
+        rating,
+        flavours: [
+          ...picked,
+          ...(other && otherText.trim() ? [otherText.trim()] : []),
+        ],
+        comment,
+      }),
     }).catch(() => {});
     setBusy(false);
     setState("done");
@@ -243,7 +262,35 @@ function Feedback() {
                   </button>
                 );
               })}
+
+              {/* Slice orders only: a special isn't on the fixed list, and
+                  someone may have had one alongside a regular flavour. */}
+              {kind === "SLICE" && (
+                <button
+                  onClick={() => {
+                    setOther(!other);
+                    if (other) setOtherText("");
+                  }}
+                  className={[
+                    "rounded-full border px-3.5 py-1.5 text-[14px] transition-colors",
+                    other
+                      ? "border-navy bg-navy text-white"
+                      : "border-field bg-paper text-ink hover:bg-cream-warm",
+                  ].join(" ")}
+                >
+                  Other (specify)
+                </button>
+              )}
             </div>
+
+            {other && (
+              <input
+                value={otherText}
+                onChange={(e) => setOtherText(e.target.value)}
+                placeholder="Which one?"
+                className="mt-2 w-full rounded-btn border border-field bg-paper px-3.5 py-2.5 text-[15px] text-ink placeholder:text-muted focus:border-gold focus:outline-none"
+              />
+            )}
           </>
         )}
 

@@ -1,17 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { money } from "@/lib/config";
+import { money, ALLERGENS } from "@/lib/config";
 import { Btn, Card, Field, readError } from "./ui";
 
 type Extra = {
   id: string;
-  kind: "SAUCE" | "TOPPING";
+  kind: "SAUCE" | "TOPPING" | "DRIZZLE";
   name: string;
   pricePence: number;
   active: boolean;
   canTub: boolean;
   warm: "NEVER" | "CHOICE" | "ALWAYS";
+  allergens: string[];
   sortOrder: number;
 };
 
@@ -35,8 +36,8 @@ export function Extras({ flash }: { flash: (m: string) => void }) {
     <Card className="mt-6">
       <h2 className="font-display text-2xl text-ink">Extras</h2>
       <p className="mt-1 text-[13px] text-ink2">
-        Sauces and toppings customers can add. Set which ones each flavour
-        offers when you edit that flavour.
+        Sauces, toppings and drizzles customers can add. Set which ones each
+        flavour offers when you edit that flavour.
       </p>
 
       <Group
@@ -56,6 +57,15 @@ export function Extras({ flash }: { flash: (m: string) => void }) {
         onChange={load}
         flash={flash}
       />
+
+      <Group
+        kind="DRIZZLE"
+        title="Sauce drizzles"
+        note="Poured over the top, after any toppings. Can be offered on every flavour, including ones that already come with a sauce."
+        extras={extras}
+        onChange={load}
+        flash={flash}
+      />
     </Card>
   );
 }
@@ -68,7 +78,7 @@ function Group({
   onChange,
   flash,
 }: {
-  kind: "SAUCE" | "TOPPING";
+  kind: "SAUCE" | "TOPPING" | "DRIZZLE";
   title: string;
   note: string;
   extras: Extra[];
@@ -86,6 +96,32 @@ function Group({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ kind, ...body }),
+    });
+    if (!r.ok) return flash(await readError(r));
+    onChange();
+  }
+
+  /*
+   * Every change to an existing item sends the whole record with the change
+   * applied. Sending only the edited field let the API fill the rest with
+   * defaults — so renaming a sauce silently reset its warm and tub settings,
+   * and would have wiped its allergens.
+   */
+  const update = (e: Extra, patch: Partial<Extra>) =>
+    save({ ...e, ...patch, name: patch.name ?? e.name, pricePence: patch.pricePence ?? e.pricePence });
+
+  async function move(e: Extra, dir: -1 | 1) {
+    const i = mine.findIndex((x) => x.id === e.id);
+    const j = i + dir;
+    if (j < 0 || j >= mine.length) return;
+
+    const next = [...mine];
+    [next[i], next[j]] = [next[j], next[i]];
+
+    const r = await fetch("/api/admin/extras/reorder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: next.map((x) => x.id) }),
     });
     if (!r.ok) return flash(await readError(r));
     onChange();
@@ -121,19 +157,36 @@ function Group({
 
       <ul className="mt-3 divide-y divide-line">
         {mine.map((e) => (
-          <li key={e.id} className="flex flex-wrap items-center gap-3 py-2.5">
+          <li key={e.id} className="py-2.5">
+           <div className="flex flex-wrap items-center gap-3">
+            {/* Order shown to customers, everywhere this appears. */}
+            <span className="flex flex-col gap-0.5">
+              <button
+                onClick={() => move(e, -1)}
+                disabled={mine[0]?.id === e.id}
+                aria-label={`Move ${e.name} up`}
+                className="rounded bg-cream-beige px-1.5 text-[10px] leading-4 text-ink2 disabled:opacity-30"
+              >
+                ▲
+              </button>
+              <button
+                onClick={() => move(e, 1)}
+                disabled={mine[mine.length - 1]?.id === e.id}
+                aria-label={`Move ${e.name} down`}
+                className="rounded bg-cream-beige px-1.5 text-[10px] leading-4 text-ink2 disabled:opacity-30"
+              >
+                ▼
+              </button>
+            </span>
+
             <EditableName
               value={e.name}
-              onCommit={(v) => save({ id: e.id, name: v, pricePence: e.pricePence })}
+              onCommit={(v) => update(e, { name: v })}
             />
             <EditablePrice
               value={(e.pricePence / 100).toFixed(2)}
               onCommit={(v) =>
-                save({
-                  id: e.id,
-                  name: e.name,
-                  pricePence: Math.round(parseFloat(v) * 100) || 0,
-                })
+                update(e, { pricePence: Math.round(parseFloat(v) * 100) || 0 })
               }
             />
             {kind === "SAUCE" && (
@@ -141,16 +194,7 @@ function Group({
                 <input
                   type="checkbox"
                   checked={e.canTub}
-                  onChange={(ev) =>
-                    save({
-                      id: e.id,
-                      name: e.name,
-                      pricePence: e.pricePence,
-                      active: e.active,
-                      canTub: ev.target.checked,
-                      warm: e.warm,
-                    })
-                  }
+                  onChange={(ev) => update(e, { canTub: ev.target.checked })}
                   className="h-4 w-4 accent-gold"
                 />
                 Can go in a tub
@@ -161,16 +205,7 @@ function Group({
               <input
                 type="checkbox"
                 checked={e.active}
-                onChange={(ev) =>
-                  save({
-                    id: e.id,
-                    name: e.name,
-                    pricePence: e.pricePence,
-                    active: ev.target.checked,
-                    canTub: e.canTub,
-                    warm: e.warm,
-                  })
-                }
+                onChange={(ev) => update(e, { active: ev.target.checked })}
                 className="h-4 w-4 accent-gold"
               />
               Available
@@ -181,14 +216,7 @@ function Group({
                 <select
                   value={e.warm}
                   onChange={(ev) =>
-                    save({
-                      id: e.id,
-                      name: e.name,
-                      pricePence: e.pricePence,
-                      active: e.active,
-                      canTub: e.canTub,
-                      warm: ev.target.value as Extra["warm"],
-                    })
+                    update(e, { warm: ev.target.value as Extra["warm"] })
                   }
                   className="rounded-btn border border-field bg-paper px-2 py-1 text-[13px] text-ink focus:border-gold focus:outline-none"
                 >
@@ -205,6 +233,44 @@ function Group({
             >
               Delete
             </button>
+           </div>
+
+            {/* Shown to customers when this is added, and copied onto the
+                order. Leaving it empty tells them it contains none — so
+                fill it in. */}
+            <div className="mt-2 flex flex-wrap items-center gap-1.5 pl-8">
+              <span className="mr-1 text-[12px] font-semibold text-ink2">
+                Allergens:
+              </span>
+              {ALLERGENS.map((a) => {
+                const on = (e.allergens ?? []).includes(a.id);
+                return (
+                  <button
+                    key={a.id}
+                    onClick={() =>
+                      update(e, {
+                        allergens: on
+                          ? e.allergens.filter((x) => x !== a.id)
+                          : [...(e.allergens ?? []), a.id],
+                      })
+                    }
+                    className={[
+                      "rounded-full border px-2.5 py-0.5 text-[12px] transition-colors",
+                      on
+                        ? "border-navy bg-navy text-white"
+                        : "border-field bg-paper text-ink2 hover:bg-cream-warm",
+                    ].join(" ")}
+                  >
+                    {a.label}
+                  </button>
+                );
+              })}
+              {(e.allergens ?? []).length === 0 && (
+                <span className="text-[11px] font-semibold text-bad">
+                  None set
+                </span>
+              )}
+            </div>
           </li>
         ))}
         {mine.length === 0 && (

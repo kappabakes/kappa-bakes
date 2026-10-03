@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { currentAdmin } from "@/lib/auth";
 import { db, midnightUtc, flavourStock } from "@/lib/stock";
+import { runStockAlerts } from "@/lib/alerts";
 
 export const dynamic = "force-dynamic";
 const authed = () => Boolean(currentAdmin());
@@ -53,6 +54,7 @@ export async function POST(req: Request) {
   // Blank means "no figure for this date" — fall back to the flavour default.
   if (stock === null || stock === undefined || Number(stock) < 0) {
     await db.dayFlavourStock.deleteMany({ where: { day, flavourId } });
+    await runStockAlerts();
     return NextResponse.json({ ok: true, cleared: true });
   }
 
@@ -62,6 +64,9 @@ export async function POST(req: Request) {
     create: { day, flavourId, stock: value },
     update: { stock: value },
   });
+
+  // Raising the count puts slices back — whoever's waiting should hear.
+  await runStockAlerts();
 
   return NextResponse.json({ ok: true, stock: value });
 }

@@ -32,6 +32,7 @@ type Receipt = {
     text: string | null;
     byFlavour: { flavour: string; allergens: string[] }[];
   };
+  cancelProof: string[];
   cancellation: {
     at: string;
     reason: string | null;
@@ -142,6 +143,29 @@ export default function ReceiptPage() {
                 : "Cancelled by Kappa Bakes"
             }
           />
+          {r.cancelProof.length > 0 && (
+            <div className="mt-2">
+              <p className="text-[12px] font-semibold">
+                Proof of the cancellation request ({r.cancelProof.length}):
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2.5">
+                {r.cancelProof.map((u, n) => (
+                <figure key={u} className="m-0 w-[180px]">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={u}
+                    alt={`Cancellation message ${n + 1}`}
+                    className="block w-full rounded border border-neutral-300"
+                  />
+                  <figcaption className="mt-0.5 text-[11px] text-neutral-600">
+                    {n + 1} of {r.cancelProof.length}
+                  </figcaption>
+                </figure>
+                ))}
+              </div>
+            </div>
+          )}
+
           {r.cancellation.note && (
             <p className="mt-2 border-l-2 border-black pl-3 italic">
               {r.cancellation.note}
@@ -177,7 +201,7 @@ export default function ReceiptPage() {
           {r.allergens?.byFlavour?.length > 0 && (
             <div className="mt-2 border-t border-neutral-300 pt-2">
               <p className="text-[12px] font-semibold">
-                Allergens shown for the flavours ordered:
+                Allergens shown for everything ordered:
               </p>
               {r.allergens.byFlavour.map((f) => (
                 <p key={f.flavour} className="text-[12px]">

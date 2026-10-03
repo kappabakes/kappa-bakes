@@ -75,7 +75,12 @@ export async function slicesTaken(day: Date, client: PrismaClient = db) {
       select: { slices: true },
     }),
     client.flavour.findMany({
-      where: { stockPerDay: { not: null } },
+      // Its own stock, or a share of a cake — either way it doesn't come out
+      // of the day's general pool, and counting it in both would take a
+      // slice off the day for every grouped slice sold.
+      where: {
+        OR: [{ stockPerDay: { not: null } }, { stockGroupId: { not: null } }],
+      },
       select: { id: true },
     }),
     client.dayFlavourStock.findMany({ where: { day } }).catch(() => []),
@@ -162,18 +167,46 @@ export async function generateFromSlots() {
 }
 
 /** KB001 upward, wrapping back to 001 after 999. */
+/**
+ * The next order number.
+ *
+ * The counter can fall behind the orders that exist — resetting it, or
+ * restoring a database, leaves it pointing at a number already issued, and
+ * the order then fails to save with nothing explaining why to the customer.
+ * So each number is checked before it's handed out, and a taken one is
+ * skipped rather than returned.
+ *
+ * The wrap at 999 is why this can happen in normal use too: past 999 it
+ * starts again at 1, and anything still in the archive from the first time
+ * round is in the way.
+ */
 export async function nextOrderNo(tx = db): Promise<string> {
-  const row = await tx.counter.upsert({
-    where: { id: 1 },
-    create: { id: 1, value: 1 },
-    update: { value: { increment: 1 } },
-  });
-  let n = row.value;
-  if (n > 999) {
-    await tx.counter.update({ where: { id: 1 }, data: { value: 1 } });
-    n = 1;
+  for (let attempt = 0; attempt < 1000; attempt++) {
+    const row = await tx.counter.upsert({
+      where: { id: 1 },
+      create: { id: 1, value: 1 },
+      update: { value: { increment: 1 } },
+    });
+
+    let n = row.value;
+    if (n > 999) {
+      await tx.counter.update({ where: { id: 1 }, data: { value: 1 } });
+      n = 1;
+    }
+
+    const orderNo = `KB${String(n).padStart(3, "0")}`;
+    const taken = await tx.order.findUnique({
+      where: { orderNo },
+      select: { id: true },
+    });
+
+    if (!taken) return orderNo;
+    console.warn(`${orderNo} is already used — skipping it.`);
   }
-  return `KB${String(n).padStart(3, "0")}`;
+
+  // Every number from 1 to 999 is in use. Deleting old archived orders frees
+  // them up; until then an order can't be given a number at all.
+  throw new Error("No order numbers left. Clear some archived orders.");
 }
 
 
@@ -239,6 +272,7 @@ export async function openDays(): Promise<OpenDay[]> {
     const perFlavour = await flavourStock(d.day);
     let specialLeft = 0;
     let specialCapacity = 0;
+    const countedGroups = new Set<string>();
     for (const row of Object.values(perFlavour)) {
       // A special not offered on this date contributes nothing. Its stock
       // figure still exists — it's what the flavour makes on a date it IS
@@ -246,6 +280,13 @@ export async function openDays(): Promise<OpenDay[]> {
       // bought.
       if (!row.offered) continue;
       if (row.stock === null || row.stock === undefined) continue;
+
+      // A shared cake counts once, however many flavours draw on it.
+      if (row.group) {
+        if (countedGroups.has(row.group.id)) continue;
+        countedGroups.add(row.group.id);
+      }
+
       specialLeft += row.left ?? 0;
       specialCapacity += row.stock;
     }
@@ -285,7 +326,8 @@ export const DEFAULTS = {
  * flavour without one is limited only by the day's total.
  */
 export async function flavourStock(day: Date) {
-  const [flavours, orders, overrides] = await Promise.all([
+  const [flavours, orders, overrides, groups, groupOverrides, caps] =
+    await Promise.all([
     db.flavour.findMany({ where: { active: true } }),
     db.order.findMany({
       where: {
@@ -298,6 +340,9 @@ export async function flavourStock(day: Date) {
       select: { slices: true },
     }),
     db.dayFlavourStock.findMany({ where: { day } }),
+    db.stockGroup.findMany({ where: { active: true } }),
+    db.dayGroupStock.findMany({ where: { day } }),
+    db.dayFlavourCap.findMany({ where: { day } }),
   ]);
 
   // A figure set against this date beats the flavour's own default.
@@ -311,12 +356,70 @@ export async function flavourStock(day: Date) {
     }
   }
 
+  /*
+   * Grouped flavours share one count, because they're cut from one cake.
+   * Everything they've each sold comes off the same figure, so selling three
+   * of one and five of the other empties an eight-slice cake.
+   */
+  const groupById = new Map(groups.map((g) => [g.id, g]));
+  const capFor = new Map(caps.map((c) => [c.flavourId, c.cap]));
+  const groupPerDay = new Map(groupOverrides.map((o) => [o.groupId, o.stock]));
+
+  const groupSold = new Map<string, number>();
+  for (const f of flavours) {
+    if (!f.stockGroupId) continue;
+    groupSold.set(
+      f.stockGroupId,
+      (groupSold.get(f.stockGroupId) ?? 0) + (sold.get(f.id) ?? 0)
+    );
+  }
+
   const out: Record<
     string,
-    { sold: number; stock: number | null; left: number | null; offered: boolean }
+    {
+      sold: number;
+      stock: number | null;
+      left: number | null;
+      offered: boolean;
+      /// Set when this flavour's count comes from a shared cake, so the
+      /// order page can say so rather than showing it as its own.
+      group?: { id: string; name: string; stock: number; left: number };
+      /// Its share of that cake, when one is set. Null means it can take
+      /// whatever's left.
+      cap?: number | null;
+    }
   > = {};
   for (const f of flavours) {
     const used = sold.get(f.id) ?? 0;
+
+    const g = f.stockGroupId ? groupById.get(f.stockGroupId) : undefined;
+    if (g) {
+      const total = groupPerDay.has(g.id) ? groupPerDay.get(g.id)! : g.stock;
+      const taken = groupSold.get(g.id) ?? 0;
+      const left = Math.max(0, total - taken);
+
+      /*
+       * A cap is optional. Without one the flavour can take whatever the
+       * cake has left; with one, it runs out at its own share even while
+       * slices remain — which is what makes reallocating possible.
+       */
+      const cap = capFor.get(f.id);
+      const capLeft = cap === undefined ? null : Math.max(0, cap - used);
+      const realLeft = capLeft === null ? left : Math.min(left, capLeft);
+
+      out[f.id] = {
+        sold: used,
+        // The group's figure is this flavour's figure — there isn't a
+        // separate one to fall back on.
+        stock: cap ?? total,
+        left: realLeft,
+        offered: f.selectedDatesOnly ? perDay.has(f.id) : true,
+        group: { id: g.id, name: g.name, stock: total, left },
+        cap: cap ?? null,
+      };
+      continue;
+    }
+
     const stock = perDay.has(f.id) ? perDay.get(f.id)! : f.stockPerDay;
     out[f.id] = {
       sold: used,

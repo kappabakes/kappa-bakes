@@ -5,6 +5,7 @@ import Image from "next/image";
 import { money } from "@/lib/config";
 import { Btn, Card, PageHead, Field, Area, Tag, Chip, readError } from "./ui";
 import { Extras } from "./Extras";
+import { StockGroups } from "./StockGroups";
 
 type Flavour = {
   id: string;
@@ -20,12 +21,15 @@ type Flavour = {
   serving: "CHOICE" | "ON_SLICE" | "IN_TUB";
   selectedDatesOnly: boolean;
   wholeAvailable: boolean;
+  buildYourOwn: boolean;
   dateStock?: { iso: string; stock: number }[];
   hasExtraSauce: boolean;
   sauceIds: string[];
   toppingIds: string[];
   maxSauces: number;
   maxToppings: number;
+  drizzleIds: string[];
+  maxDrizzles: number;
   active: boolean;
   sortOrder: number;
 };
@@ -40,6 +44,7 @@ const placeholder = {
   serving: "CHOICE" as "CHOICE" | "ON_SLICE" | "IN_TUB",
   selectedDatesOnly: false,
   wholeAvailable: true,
+  buildYourOwn: false,
   dateStock: [] as { iso: string; stock: number }[],
   hasExtraSauce: true,
   allergens: ["milk", "eggs", "gluten"] as string[],
@@ -49,8 +54,11 @@ const placeholder = {
   stockPerDay: "",
   sauceIds: [] as string[],
   toppingIds: [] as string[],
-  maxSauces: 1,
-  maxToppings: 2,
+  /// Text while editing, so a blank field can mean "no limit".
+  maxSauces: "1",
+  maxToppings: "2",
+  drizzleIds: [] as string[],
+  maxDrizzles: "1",
   sortOrder: 0,
 };
 
@@ -67,7 +75,7 @@ export function MenuManager({ flash }: { flash: (m: string) => void }) {
   >([]);
   const [newAllergen, setNewAllergen] = useState("");
   const [catalogue, setCatalogue] = useState<
-    { id: string; kind: "SAUCE" | "TOPPING"; name: string; pricePence: number; active: boolean }[]
+    { id: string; kind: "SAUCE" | "TOPPING" | "DRIZZLE"; name: string; pricePence: number; active: boolean }[]
   >([]);
 
   const load = useCallback(async () => {
@@ -140,12 +148,15 @@ export function MenuManager({ flash }: { flash: (m: string) => void }) {
       serving: f.serving ?? "CHOICE",
       selectedDatesOnly: f.selectedDatesOnly ?? false,
       wholeAvailable: f.wholeAvailable ?? true,
+      buildYourOwn: f.buildYourOwn ?? false,
       dateStock: f.dateStock ?? [],
       hasExtraSauce: f.hasExtraSauce ?? true,
       sauceIds: f.sauceIds ?? [],
       toppingIds: f.toppingIds ?? [],
-      maxSauces: f.maxSauces ?? 1,
-      maxToppings: f.maxToppings ?? 2,
+      maxSauces: f.maxSauces === 0 ? "" : String(f.maxSauces ?? 1),
+      maxToppings: f.maxToppings === 0 ? "" : String(f.maxToppings ?? 2),
+      drizzleIds: f.drizzleIds ?? [],
+      maxDrizzles: f.maxDrizzles === 0 ? "" : String(f.maxDrizzles ?? 1),
       sortOrder: f.sortOrder,
     });
   }
@@ -184,14 +195,25 @@ export function MenuManager({ flash }: { flash: (m: string) => void }) {
         serving: draft.serving,
         selectedDatesOnly: draft.selectedDatesOnly,
         wholeAvailable: draft.wholeAvailable,
+        buildYourOwn: draft.buildYourOwn,
         dateStock: draft.selectedDatesOnly ? draft.dateStock : [],
         hasExtraSauce: draft.hasExtraSauce,
         sauceIds: draft.sauceIds,
         toppingIds: draft.toppingIds,
-        maxSauces: Number(draft.maxSauces) || 1,
-        maxToppings: Number(draft.maxToppings) || 2,
+        // Blank means no limit, stored as 0.
+        maxSauces: draft.maxSauces.trim() === "" ? 0 : Number(draft.maxSauces) || 0,
+        maxToppings:
+          draft.maxToppings.trim() === "" ? 0 : Number(draft.maxToppings) || 0,
+        drizzleIds: draft.drizzleIds,
+        maxDrizzles:
+          draft.maxDrizzles.trim() === "" ? 0 : Number(draft.maxDrizzles) || 0,
         sortOrder: Number(draft.sortOrder) || 0,
-        active: true,
+        /*
+         * Only on create. Sending it on an update unarchived any archived
+         * flavour you edited — which looked like it had disappeared, when it
+         * had actually jumped back onto the live menu.
+         */
+        ...(editing === "new" ? { active: true } : {}),
       }),
     });
     if (!r.ok) return flash(await readError(r));
@@ -448,6 +470,26 @@ export function MenuManager({ flash }: { flash: (m: string) => void }) {
                   <span className="block text-[12px] text-ink2">
                     Untick for a plain slice. Customers still choose on the
                     slice or in a tub if they add a sauce or a topping.
+                  </span>
+                </span>
+              </label>
+
+              {/* Changes how customers build this slice, not what's on it. */}
+              <label className="flex items-start gap-3 border-t border-line pt-4 text-[15px] text-ink">
+                <input
+                  type="checkbox"
+                  checked={draft.buildYourOwn}
+                  onChange={(e) =>
+                    setDraft({ ...draft, buildYourOwn: e.target.checked })
+                  }
+                  className="mt-1 h-4 w-4 accent-gold"
+                />
+                <span>
+                  Create Your Own
+                  <span className="block text-[12px] text-ink2">
+                    Customers choose a sauce first, then toppings, one step at
+                    a time. A sauce is required and the first one is included
+                    in the price. Allergens show as one combined list.
                   </span>
                 </span>
               </label>
@@ -719,14 +761,13 @@ export function MenuManager({ flash }: { flash: (m: string) => void }) {
                 extra={
                   <Field
                     label="How many at once"
-                    value={String(draft.maxSauces)}
+                    value={draft.maxSauces}
+                    placeholder="no limit"
+                    hint="Leave blank for no limit"
                     onChange={(v) =>
-                      setDraft({
-                        ...draft,
-                        maxSauces: Number(v.replace(/\D/g, "")) || 1,
-                      })
+                      setDraft({ ...draft, maxSauces: v.replace(/\D/g, "") })
                     }
-                    className="mt-3 w-36"
+                    className="mt-3 w-40"
                   />
                 }
               />
@@ -741,14 +782,34 @@ export function MenuManager({ flash }: { flash: (m: string) => void }) {
                 extra={
                   <Field
                     label="How many at once"
-                    value={String(draft.maxToppings)}
+                    value={draft.maxToppings}
+                    placeholder="no limit"
+                    hint="Leave blank for no limit"
                     onChange={(v) =>
-                      setDraft({
-                        ...draft,
-                        maxToppings: Number(v.replace(/\D/g, "")) || 1,
-                      })
+                      setDraft({ ...draft, maxToppings: v.replace(/\D/g, "") })
                     }
-                    className="mt-3 w-36"
+                    className="mt-3 w-40"
+                  />
+                }
+              />
+
+              <ExtraPicker
+                title="Sauce drizzles"
+                note="Poured over the top, after any toppings. Offerable on every flavour, including ones that already come with a sauce."
+                kind="DRIZZLE"
+                catalogue={catalogue}
+                selected={draft.drizzleIds}
+                onChange={(ids) => setDraft({ ...draft, drizzleIds: ids })}
+                extra={
+                  <Field
+                    label="How many at once"
+                    value={draft.maxDrizzles}
+                    placeholder="no limit"
+                    hint="Leave blank for no limit"
+                    onChange={(v) =>
+                      setDraft({ ...draft, maxDrizzles: v.replace(/\D/g, "") })
+                    }
+                    className="mt-3 w-40"
                   />
                 }
               />
@@ -834,6 +895,11 @@ export function MenuManager({ flash }: { flash: (m: string) => void }) {
                     {f.description}
                   </p>
 
+                  {f.buildYourOwn && (
+                    <p className="mt-1 text-[12px] font-semibold text-gold-hover">
+                      Create Your Own
+                    </p>
+                  )}
                   {f.wholeAvailable === false && (
                     <p className="mt-1 text-[12px] font-semibold text-ink2">
                       Not offered whole
@@ -912,6 +978,7 @@ export function MenuManager({ flash }: { flash: (m: string) => void }) {
       </Card>
 
       <Extras flash={flash} />
+      <StockGroups flash={flash} />
 
       {archived.length > 0 && (
         <Card className="mt-5">
@@ -974,7 +1041,7 @@ function ExtraPicker({
 }: {
   title: string;
   note: string;
-  kind: "SAUCE" | "TOPPING";
+  kind: "SAUCE" | "TOPPING" | "DRIZZLE";
   catalogue: { id: string; kind: string; name: string; pricePence: number; active: boolean }[];
   selected: string[];
   onChange: (ids: string[]) => void;

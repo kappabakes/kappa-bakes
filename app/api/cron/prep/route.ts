@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/stock";
 import { PREP_DAYS_AHEAD, sendPrepEmail } from "@/lib/prep";
+import { isUkHour, ukHourNow, ukDateIn } from "@/lib/uk-time";
 
 export const dynamic = "force-dynamic";
 
@@ -20,16 +21,9 @@ export async function GET(req: Request) {
   if (!manual && auth !== `Bearer ${process.env.CRON_SECRET}`)
     return new NextResponse("Nope", { status: 401 });
 
-  const ukHour = Number(
-    new Date().toLocaleString("en-GB", {
-      timeZone: "Europe/London",
-      hour: "2-digit",
-      hour12: false,
-    })
-  );
-
-  if (!manual && ukHour !== 7)
-    return NextResponse.json({ skipped: `It's ${ukHour}:00 in London` });
+  // 7am in London, all year.
+  if (!isUkHour(7, manual))
+    return NextResponse.json({ skipped: `It's ${ukHourNow()}:00 in London` });
 
   /*
    * Normally two days ahead. `?date=YYYY-MM-DD` overrides it, which is the
@@ -38,9 +32,7 @@ export async function GET(req: Request) {
    */
   const target =
     url.searchParams.get("date") ??
-    new Date(
-      Date.now() + PREP_DAYS_AHEAD * 24 * 60 * 60 * 1000
-    ).toLocaleDateString("en-CA", { timeZone: "Europe/London" });
+    ukDateIn(PREP_DAYS_AHEAD);
 
   // Once per date, however many times this runs.
   const key = `prepSent:${target}`;

@@ -15,11 +15,16 @@ type Flavour = {
   toppingIds: string[];
   maxSauces: number;
   maxToppings: number;
+  drizzleIds: string[];
+  maxDrizzles: number;
+  /// Set means this flavour has its own pool and doesn't come out of the
+  /// day's general count.
+  stockPerDay: number | null;
 };
 
 type Extra = {
   id: string;
-  kind: "SAUCE" | "TOPPING";
+  kind: "SAUCE" | "TOPPING" | "DRIZZLE";
   name: string;
   pricePence: number;
   active: boolean;
@@ -33,6 +38,7 @@ type Line = {
   addedSauceIds: string[];
   warmSauceIds: string[];
   addedToppingIds: string[];
+  addedDrizzleIds: string[];
 };
 
 const METHODS = ["Free", "Cash", "Bank transfer", "Other"];
@@ -101,7 +107,8 @@ export function ManualOrder({
       (flavours.find((x) => x.id === l.flavourId)?.pricePence ?? 0) +
       (l.extraSauce ? extraSaucePence(l.extraSauce) : 0) +
       l.addedSauceIds.reduce((m, id) => m + priceOf(id), 0) +
-      l.addedToppingIds.reduce((m, id) => m + priceOf(id), 0),
+      l.addedToppingIds.reduce((m, id) => m + priceOf(id), 0) +
+    l.addedDrizzleIds.reduce((m, id) => m + priceOf(id), 0),
     0
   );
 
@@ -219,6 +226,7 @@ export function ManualOrder({
                               addedSauceIds: [],
                   warmSauceIds: [],
                               addedToppingIds: [],
+                  addedDrizzleIds: [],
                             }
                           : x
                       )
@@ -286,7 +294,7 @@ export function ManualOrder({
                   Array.from(
                     {
                       length: Math.min(
-                        fl.maxSauces,
+                        fl.maxSauces || Infinity,
                         extras.filter(
                           (e) =>
                             e.kind === "SAUCE" && fl.sauceIds.includes(e.id)
@@ -337,7 +345,7 @@ export function ManualOrder({
                   Array.from(
                     {
                       length: Math.min(
-                        fl.maxToppings,
+                        fl.maxToppings || Infinity,
                         extras.filter(
                           (e) =>
                             e.kind === "TOPPING" && fl.toppingIds.includes(e.id)
@@ -370,6 +378,57 @@ export function ManualOrder({
                             (e) =>
                               e.kind === "TOPPING" &&
                               fl.toppingIds.includes(e.id) &&
+                              !taken.includes(e.id)
+                          )
+                          .map((e) => (
+                            <option key={e.id} value={e.id}>
+                              {e.name} (+{money(e.pricePence)})
+                            </option>
+                          ))}
+                      </select>
+                    );
+                    }
+                  )}
+
+                {fl &&
+                  fl.drizzleIds.length > 0 &&
+                  // Never more boxes than drizzles available on this flavour.
+                  Array.from(
+                    {
+                      length: Math.min(
+                        fl.maxDrizzles || Infinity,
+                        extras.filter(
+                          (e) =>
+                            e.kind === "DRIZZLE" && fl.drizzleIds.includes(e.id)
+                        ).length
+                      ),
+                    },
+                    (_, n) => {
+                    const taken = l.addedDrizzleIds.filter((_, j) => j !== n);
+                    return (
+                      <select
+                        key={n}
+                        value={l.addedDrizzleIds[n] ?? ""}
+                        onChange={(e) => {
+                          const next = [...l.addedDrizzleIds];
+                          if (e.target.value) next[n] = e.target.value;
+                          else next.splice(n, 1);
+                          setLines(
+                            lines.map((x, j) =>
+                              j === i
+                                ? { ...x, addedDrizzleIds: next.filter(Boolean) }
+                                : x
+                            )
+                          );
+                        }}
+                        className="rounded-btn border border-field bg-paper px-3 py-2 text-sm text-ink"
+                      >
+                        <option value="">Drizzle {n + 1}</option>
+                        {extras
+                          .filter(
+                            (e) =>
+                              e.kind === "DRIZZLE" &&
+                              fl.drizzleIds.includes(e.id) &&
                               !taken.includes(e.id)
                           )
                           .map((e) => (
@@ -446,6 +505,7 @@ export function ManualOrder({
                   addedSauceIds: [],
                   warmSauceIds: [],
                   addedToppingIds: [],
+                  addedDrizzleIds: [],
                 },
               ])
             }
@@ -515,7 +575,14 @@ export function ManualOrder({
         </span>
       </div>
 
-      {day && lines.length > day.left && (
+      {/* Only the flavours that come out of the day's general pool. Counting
+          a special here warned about going over capacity when it wasn't —
+          the server now applies the same rule. */}
+      {day &&
+        lines.filter(
+          (l) =>
+            flavours.find((f) => f.id === l.flavourId)?.stockPerDay == null
+        ).length > day.left && (
         <p className="mt-3 rounded-card border border-gold/40 bg-gold-light px-4 py-2.5 text-[13px] text-ink">
           Only {day.left} slice{day.left === 1 ? "" : "s"} free that day.
           You&apos;ll be asked to confirm before it goes over.

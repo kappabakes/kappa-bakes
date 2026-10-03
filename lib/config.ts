@@ -115,7 +115,7 @@ export const HORIZON_WEEKS = 1;
  * sitting properly and sliding off before someone gets home.
  */
 export const HEADS_UP_NOTE =
-  "When you're 2-3 minutes away, please message us on WhatsApp so we can add " +
+  "When you're 5 minutes away, please message us on WhatsApp so we can add " +
   "your toppings. They go on fresh, and this keeps them from sliding before " +
   "you get home.";
 
@@ -126,6 +126,72 @@ export const HEADS_UP_NOTE =
 export const DEPOSIT_TERMS =
   "The deposit is non-refundable. The remaining balance is taken by " +
   "contactless card payment on collection.";
+
+/**
+ * The whole-cheesecake page. Everything here is editable in one place rather
+ * than buried in the page itself.
+ */
+export const FULL_CAKES = {
+  /// Re-export at 2000px+ and replace this file to sharpen the zoom.
+  image: "/full-cheesecakes.jpeg",
+  intro:
+    "Thank you for checking out Kappa Bakes for a Full San Sebastián " +
+    "Cheesecake. Before you look to place an order please see below image " +
+    "showing the pricing and all the FAQ's regarding Full San Sebastián " +
+    "Orders.",
+  callout:
+    "To place an order, please click the below button to message on WhatsApp " +
+    "so we can discuss and confirm your order. If you have any questions " +
+    "prior to considering an order please still contact via WhatsApp using " +
+    "the button below.",
+  faqs: [
+    {
+      q: "How do I place an order?",
+      a: "Through WhatsApp only, so we can agree your flavours, collection date and time before anything is confirmed.",
+    },
+    {
+      q: "What is the latest that I can order a Full San Sebastián?",
+      a: "At least 48 hours before collection, and subject to availability — so for a Saturday, Thursday at the latest. Earlier is always safer, especially at weekends.",
+    },
+    {
+      q: "What deposit is taken?",
+      a: "A £20 non-refundable deposit is taken to confirm your order. The remaining balance is taken as a contactless payment when you collect. For a special request the deposit is discussed on enquiry.",
+    },
+    {
+      q: "Can I change the sauce or toppings for a flavour?",
+      a: "Yes. Message us with what you'd like and we'll price it on enquiry.",
+    },
+    {
+      q: "Can I order a weekly special as a full cheesecake?",
+      a: "Yes — ask on WhatsApp and we'll let you know if it's possible for your date. Specials are priced on enquiry.",
+    },
+    {
+      q: "Does it come pre-sliced?",
+      a: "Yes. Every full cheesecake is eight slices, pre-sliced and boxed, ready to serve.",
+    },
+    {
+      q: "Can I collect, or do you deliver?",
+      a: "Collection only as standard. Delivery can be discussed and carries an extra charge depending on where you are.",
+    },
+  ],
+};
+
+/**
+ * The regular menu, for the slice survey's flavour list.
+ *
+ * Deliberately fixed rather than read from the database: a survey that
+ * changed its options every time a special came and went would give you a
+ * by-flavour breakdown you couldn't compare across weeks. Specials are
+ * captured under "Other" instead.
+ */
+export const CORE_FLAVOURS = [
+  "Plain Jane",
+  "Special K",
+  "The Chocolate One",
+  "Berry Bliss",
+  "Meet Me Halfway",
+  "Create Your Own",
+] as const;
 
 export const GRACE_MINUTES = 15;
 export const LATE_GRACE_MINUTES = 30;

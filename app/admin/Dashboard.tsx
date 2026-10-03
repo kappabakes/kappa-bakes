@@ -49,6 +49,11 @@ type FlavourRow = {
 export function Dashboard({ go }: { go: (s: "orders" | "dates") => void }) {
   const [days, setDays] = useState<Day[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  /// Who's waiting on a sold-out flavour — demand you didn't meet, which
+  /// sales figures can never show.
+  const [waiting, setWaiting] = useState<
+    { flavourId: string; name: string; total: number; anyDate: number }[]
+  >([]);
 
   const load = useCallback(async () => {
     const [d, o] = await Promise.all([
@@ -57,6 +62,9 @@ export function Dashboard({ go }: { go: (s: "orders" | "dates") => void }) {
     ]);
     if (d.ok) setDays((await d.json()).days);
     if (o.ok) setOrders((await o.json()).orders);
+
+    const w = await fetch("/api/admin/waiting").catch(() => null);
+    if (w?.ok) setWaiting((await w.json()).waiting);
   }, []);
 
   // Live: refresh on mount, every 30 seconds, and when the tab regains focus.
@@ -335,6 +343,41 @@ export function Dashboard({ go }: { go: (s: "orders" | "dates") => void }) {
           </ul>
         )}
       </Card>
+      {waiting.length > 0 && (
+        <Card className="mt-6">
+          <h2 className="font-display text-xl text-ink">Waiting list</h2>
+          <p className="mt-1 text-[13px] text-ink2">
+            People asked to be told when these came back. It&apos;s the one
+            signal that shows demand you didn&apos;t meet.
+          </p>
+
+          <ul className="mt-3 space-y-2">
+            {waiting.map((w, i) => (
+              <li
+                key={w.flavourId}
+                className="flex flex-wrap items-baseline justify-between gap-2"
+              >
+                <span className="text-[15px] text-ink">
+                  {w.name}
+                  {i === 0 && waiting.length > 1 && (
+                    <span className="ml-2 rounded-md bg-gold-light px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-gold-hover">
+                      Most wanted
+                    </span>
+                  )}
+                </span>
+                <span className="text-[13px] text-ink2">
+                  {w.total} waiting
+                  {w.anyDate > 0 && ` · ${w.anyDate} any date`}
+                </span>
+              </li>
+            ))}
+          </ul>
+
+          <p className="mt-3 text-[12px] text-muted">
+            Emails send on their own when a flavour comes back.
+          </p>
+        </Card>
+      )}
     </>
   );
 }

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { money, shortDay, extraSaucePence } from "@/lib/config";
 import { PageHead, readError, adminBase } from "./ui";
+import { ProofImages } from "./ProofImages";
 import { ManualOrder } from "./ManualOrder";
 
 const PhoneIcon = () => (
@@ -41,12 +42,14 @@ type Slice = {
   /// can round-trip it.
   warmSauceIds?: string[];
   addedToppings?: { name: string; pricePence: number }[] | null;
+  addedDrizzles?: { name: string; pricePence: number; allergens?: string[] }[] | null;
   addedToppingIds?: string[];
+  addedDrizzleIds?: string[];
 };
 
 type Extra = {
   id: string;
-  kind: "SAUCE" | "TOPPING";
+  kind: "SAUCE" | "TOPPING" | "DRIZZLE";
   name: string;
   pricePence: number;
   active: boolean;
@@ -74,6 +77,7 @@ type Order = {
   cancelledAt: string | null;
   cancelReason: string | null;
   cancelNote: string | null;
+  cancelProof: string[];
 };
 type Flavour = {
   id: string;
@@ -84,8 +88,10 @@ type Flavour = {
   /// the customer had.
   sauceIds?: string[];
   toppingIds?: string[];
+  drizzleIds?: string[];
   maxSauces?: number;
   maxToppings?: number;
+  maxDrizzles?: number;
 };
 type Day = {
   iso: string;
@@ -134,6 +140,8 @@ function summarise(slices: Slice[]) {
     if (sauces.length) key += ` + SAUCE: ${sauces.join(", ")}`;
     if (s.addedToppings?.length)
       key += ` + TOPPINGS: ${s.addedToppings.map((t) => t.name).join(", ")}`;
+    if (s.addedDrizzles?.length)
+      key += ` + DRIZZLE: ${s.addedDrizzles.map((t) => t.name).join(", ")}`;
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
   return [...counts].map(([label, n]) => `${n}x ${label}`);
@@ -150,6 +158,11 @@ export function Orders({ flash }: { flash: (m: string) => void }) {
   const [query, setQuery] = useState("");
   /// Tap a flavour in the breakdown to see only the orders containing it.
   const [flavourFilter, setFlavourFilter] = useState<string | null>(null);
+  /// Narrows to the slices going in a tub, or the ones going on the slice.
+  /// Stacks with the flavour filter, so "Special K in a tub" is reachable.
+  const [placeFilter, setPlaceFilter] = useState<
+    "in a tub" | "on the slice" | null
+  >(null);
   /// null shows everything. Stacks with the flavour filter and the search.
   const [statusFilter, setStatusFilter] = useState<Order["status"] | null>(
     null
@@ -225,9 +238,19 @@ export function Orders({ flash }: { flash: (m: string) => void }) {
 
   // The flavour filter and the search stack: filter to Special K, then search
   // within it.
-  const byFlavour = flavourFilter
-    ? all.filter((o) => o.slices.some((sl) => sl.flavour === flavourFilter))
-    : all;
+  /*
+   * Both filters look at the same slice, not the same order — otherwise an
+   * order with a tubbed Berry Bliss and an on-slice Special K would match
+   * "Special K in a tub", which is the opposite of what you asked for.
+   */
+  const matches = (sl: Order["slices"][number]) =>
+    (!flavourFilter || sl.flavour === flavourFilter) &&
+    (!placeFilter || sl.placement === placeFilter);
+
+  const byFlavour =
+    flavourFilter || placeFilter
+      ? all.filter((o) => o.slices.some(matches))
+      : all;
 
   const byStatus = statusFilter
     ? byFlavour.filter((o) => o.status === statusFilter)
@@ -285,6 +308,7 @@ export function Orders({ flash }: { flash: (m: string) => void }) {
                   setQuery("");
                   setFlavourFilter(null);
                   setStatusFilter(null);
+                  setPlaceFilter(null);
                 }}
                 className={[
                   "rounded-card border px-4 py-3 text-left transition-colors",
@@ -373,9 +397,10 @@ export function Orders({ flash }: { flash: (m: string) => void }) {
                       <li key={b.flavour}>
                         {/* Tap a flavour to see only the orders with it in. */}
                         <button
-                          onClick={() =>
-                            setFlavourFilter(on ? null : b.flavour)
-                          }
+                          onClick={() => {
+                            setFlavourFilter(on ? null : b.flavour);
+                            setPlaceFilter(null);
+                          }}
                           className={[
                             "flex w-full items-baseline justify-between gap-4 rounded-btn px-2 py-1.5 text-left text-[15px] transition-colors",
                             on
@@ -397,14 +422,56 @@ export function Orders({ flash }: { flash: (m: string) => void }) {
                             ].join(" ")}
                           >
                             {b.total} slice{b.total === 1 ? "" : "s"}
-                            {b.tubs > 0 && (
-                              <span className={on ? "" : "text-gold"}>
-                                {" "}
-                                · {b.tubs} tub{b.tubs === 1 ? "" : "s"}
-                              </span>
-                            )}
                           </span>
                         </button>
+
+                        {/* The tub count is its own filter — with a flavour
+                            chosen it narrows to that flavour's tubs. */}
+                        {b.tubs > 0 && (
+                          <div className="flex flex-wrap gap-1.5 px-2 pb-1">
+                            <button
+                              onClick={() => {
+                                setFlavourFilter(b.flavour);
+                                setPlaceFilter(
+                                  placeFilter === "in a tub" && on
+                                    ? null
+                                    : "in a tub"
+                                );
+                              }}
+                              className={[
+                                "rounded-btn px-2.5 py-1 text-[12px] font-semibold transition-colors",
+                                on && placeFilter === "in a tub"
+                                  ? "bg-gold text-white"
+                                  : "bg-gold-light text-gold-hover hover:bg-cream-warm",
+                              ].join(" ")}
+                            >
+                              {b.tubs} in a tub
+                              {on && placeFilter === "in a tub" && " ✕"}
+                            </button>
+
+                            {b.total - b.tubs > 0 && (
+                              <button
+                                onClick={() => {
+                                  setFlavourFilter(b.flavour);
+                                  setPlaceFilter(
+                                    placeFilter === "on the slice" && on
+                                      ? null
+                                      : "on the slice"
+                                  );
+                                }}
+                                className={[
+                                  "rounded-btn px-2.5 py-1 text-[12px] font-semibold transition-colors",
+                                  on && placeFilter === "on the slice"
+                                    ? "bg-navy text-white"
+                                    : "bg-cream-beige text-ink2 hover:bg-cream-warm",
+                                ].join(" ")}
+                              >
+                                {b.total - b.tubs} on the slice
+                                {on && placeFilter === "on the slice" && " ✕"}
+                              </button>
+                            )}
+                          </div>
+                        )}
 
                         {/* The detail behind the tub count, so you know what
                             each one is for. */}
@@ -479,16 +546,18 @@ export function Orders({ flash }: { flash: (m: string) => void }) {
             })}
           </div>
 
-          {flavourFilter && (
+          {(flavourFilter || placeFilter) && (
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-card border border-navy bg-navy px-4 py-2.5 text-white">
               <span className="text-[15px]">
                 Showing orders with{" "}
-                <strong>{flavourFilter}</strong> in them
+                <strong>{flavourFilter ?? "slices"}</strong>
+                {placeFilter ? ` ${placeFilter}` : " in them"}
               </span>
               <button
                 onClick={() => {
                   setFlavourFilter(null);
                   setStatusFilter(null);
+                  setPlaceFilter(null);
                 }}
                 className="rounded-btn bg-white/15 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/25"
               >
@@ -514,7 +583,7 @@ export function Orders({ flash }: { flash: (m: string) => void }) {
             )}
           </div>
 
-          {(query || flavourFilter || statusFilter) && (
+          {(query || flavourFilter || statusFilter || placeFilter) && (
             <p className="mb-3 text-[13px] text-ink2">
               Showing {list.length} of {all.length} order
               {all.length === 1 ? "" : "s"}
@@ -522,10 +591,12 @@ export function Orders({ flash }: { flash: (m: string) => void }) {
           )}
 
           <ul className="divide-y divide-line">
-            {list.length === 0 && (query || flavourFilter || statusFilter) && (
+            {list.length === 0 &&
+              (query || flavourFilter || statusFilter || placeFilter) && (
               <li className="py-6 text-center text-sm text-ink2">
                 Nothing matches
                 {flavourFilter && ` for ${flavourFilter}`}
+                {placeFilter && ` ${placeFilter}`}
                 {query && " with that search"}. Clear it and try again.
               </li>
             )}
@@ -588,8 +659,23 @@ export function Orders({ flash }: { flash: (m: string) => void }) {
                   ))}
                 </ul>
 
+                {/* What the customer wrote at checkout. */}
                 {o.notes && (
                   <p className="mt-2 text-sm text-gold">“{o.notes}”</p>
+                )}
+
+                {/*
+                  Your own note. It was only visible inside the edit dialog,
+                  several screens down — no use at all for something written
+                  so you'd see it when the order came up.
+                */}
+                {o.adminNotes && (
+                  <p className="mt-2 whitespace-pre-line rounded-btn border border-navy/20 bg-cream-warm px-3 py-2 text-sm text-ink">
+                    <span className="mr-1.5 text-[10px] font-bold uppercase tracking-wider text-ink2">
+                      Your note
+                    </span>
+                    {o.adminNotes}
+                  </p>
                 )}
 
                 <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-ink2">
@@ -779,6 +865,23 @@ export function Orders({ flash }: { flash: (m: string) => void }) {
                     <span className="mt-1 block text-[12px] text-ink2">
                       The slices are back on sale.
                     </span>
+
+                    {/* Screenshots of the message asking to cancel, added
+                        now or any time after. */}
+                    <ProofImages
+                      id={o.id}
+                      kind="SLICE"
+                      field="cancelProof"
+                      proof={o.cancelProof ?? []}
+                      onChange={(next) =>
+                        setOrders(
+                          orders.map((x) =>
+                            x.id === o.id ? { ...x, cancelProof: next } : x
+                          )
+                        )
+                      }
+                      flash={flash}
+                    />
                   </p>
                 )}
 
@@ -864,6 +967,7 @@ function EditOrder({
       addedSauceIds: s.addedSauceIds ?? [],
       warmSauceIds: s.warmSauceIds ?? [],
       addedToppingIds: s.addedToppingIds ?? [],
+      addedDrizzleIds: s.addedDrizzleIds ?? [],
     }))
   );
 
@@ -878,7 +982,8 @@ function EditOrder({
       (flavours.find((x) => x.id === s.flavourId)?.pricePence ?? 0) +
       (s.extraSauce ? extraSaucePence(s.extraSauce) : 0) +
       s.addedSauceIds.reduce((m, id) => m + priceOf(id), 0) +
-      s.addedToppingIds.reduce((m, id) => m + priceOf(id), 0),
+      s.addedToppingIds.reduce((m, id) => m + priceOf(id), 0) +
+    s.addedDrizzleIds.reduce((m, id) => m + priceOf(id), 0),
     0
   );
 
@@ -973,7 +1078,7 @@ function EditOrder({
                   Array.from(
                     {
                       length: Math.min(
-                        fl?.maxSauces ?? 1,
+                        fl?.maxSauces || Infinity,
                         extras.filter(
                           (e) =>
                             e.kind === "SAUCE" && fl?.sauceIds?.includes(e.id)
@@ -1023,7 +1128,7 @@ function EditOrder({
                   Array.from(
                     {
                       length: Math.min(
-                        fl?.maxToppings ?? 2,
+                        fl?.maxToppings || Infinity,
                         extras.filter(
                           (e) =>
                             e.kind === "TOPPING" &&
@@ -1057,6 +1162,56 @@ function EditOrder({
                             (e) =>
                               e.kind === "TOPPING" &&
                               fl?.toppingIds?.includes(e.id) &&
+                              !taken.includes(e.id)
+                          )
+                          .map((e) => (
+                            <option key={e.id} value={e.id}>
+                              {e.name} (+{money(e.pricePence)})
+                            </option>
+                          ))}
+                      </select>
+                    );
+                    }
+                  )}
+
+                {(fl?.drizzleIds?.length ?? 0) > 0 &&
+                  Array.from(
+                    {
+                      length: Math.min(
+                        fl?.maxDrizzles || Infinity,
+                        extras.filter(
+                          (e) =>
+                            e.kind === "DRIZZLE" &&
+                            fl?.drizzleIds?.includes(e.id)
+                        ).length
+                      ),
+                    },
+                    (_, n) => {
+                    const taken = s.addedDrizzleIds.filter((_, j) => j !== n);
+                    return (
+                      <select
+                        key={n}
+                        value={s.addedDrizzleIds[n] ?? ""}
+                        onChange={(e) => {
+                          const next = [...s.addedDrizzleIds];
+                          if (e.target.value) next[n] = e.target.value;
+                          else next.splice(n, 1);
+                          setSlices(
+                            slices.map((x, j) =>
+                              j === i
+                                ? { ...x, addedDrizzleIds: next.filter(Boolean) }
+                                : x
+                            )
+                          );
+                        }}
+                        className="rounded-btn border border-field bg-paper px-2 py-1.5 text-sm text-ink"
+                      >
+                        <option value="">Drizzle {n + 1}</option>
+                        {extras
+                          .filter(
+                            (e) =>
+                              e.kind === "DRIZZLE" &&
+                              fl?.drizzleIds?.includes(e.id) &&
                               !taken.includes(e.id)
                           )
                           .map((e) => (
@@ -1132,6 +1287,7 @@ function EditOrder({
                   addedSauceIds: [],
                   warmSauceIds: [],
                   addedToppingIds: [],
+                  addedDrizzleIds: [],
                 },
               ])
             }
@@ -1222,13 +1378,28 @@ function CancelPanel({
   const [reason, setReason] = useState<"CUSTOMER" | "OTHER">("CUSTOMER");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const [sendEmail, setSendEmail] = useState(true);
+  const [refund, setRefund] = useState<
+    "NONE" | "FULL" | "PARTIAL" | "NOTHING_PAID"
+  >("NONE");
+  const [partial, setPartial] = useState("");
 
   async function go() {
     setBusy(true);
     const r = await fetch("/api/admin/orders/cancel", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: order.id, reason, note }),
+      body: JSON.stringify({
+        id: order.id,
+        reason,
+        note,
+        sendEmail,
+        refund,
+        refundPence:
+          refund === "PARTIAL"
+            ? Math.round(parseFloat(partial || "0") * 100)
+            : undefined,
+      }),
     });
     setBusy(false);
     if (!r.ok) return flash(await readError(r));
@@ -1277,6 +1448,54 @@ function CancelPanel({
           onChange={(e) => setNote(e.target.value)}
           className="w-full rounded-btn border border-field bg-paper px-3 py-2.5 text-[15px] text-ink placeholder:text-muted focus:border-gold focus:outline-none"
         />
+      </label>
+
+      {/* Picked from a list, so the wording a customer reads is the same
+          every time. */}
+      <label className="mt-3 block">
+        <span className="mb-1.5 block text-[13px] font-semibold text-ink">
+          Refund
+        </span>
+        <select
+          value={refund}
+          onChange={(e) => setRefund(e.target.value as typeof refund)}
+          className="w-full rounded-btn border border-field bg-paper px-3 py-2.5 text-[15px] text-ink focus:border-gold focus:outline-none"
+        >
+          <option value="NONE">No refund</option>
+          <option value="FULL">Full refund ({money(order.totalPence)})</option>
+          <option value="PARTIAL">Partial refund</option>
+          <option value="NOTHING_PAID">Nothing was paid</option>
+        </select>
+      </label>
+
+      {refund === "PARTIAL" && (
+        <label className="mt-2 block">
+          <span className="mb-1.5 block text-[13px] font-semibold text-ink">
+            How much (£)
+          </span>
+          <input
+            inputMode="decimal"
+            value={partial}
+            onChange={(e) => setPartial(e.target.value)}
+            placeholder="0.00"
+            className="w-32 rounded-btn border border-field bg-paper px-3 py-2.5 text-[15px] text-ink"
+          />
+        </label>
+      )}
+
+      <label className="mt-3 flex items-start gap-3 text-[14px] text-ink">
+        <input
+          type="checkbox"
+          checked={sendEmail}
+          onChange={(e) => setSendEmail(e.target.checked)}
+          className="mt-0.5 h-4 w-4 accent-gold"
+        />
+        <span>
+          Email the customer
+          <span className="block text-[12px] text-ink2">
+            Leave unticked when you&apos;ve already sorted it by message.
+          </span>
+        </span>
       </label>
 
       <div className="mt-3 flex flex-wrap gap-2">

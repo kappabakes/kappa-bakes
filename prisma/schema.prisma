@@ -40,6 +40,72 @@ enum WarmOption {
 enum ExtraKind {
   SAUCE
   TOPPING
+  /// Poured over whatever's already on the slice, toppings included. Its own
+  /// kind rather than a sauce, because it's added last and can be offered
+  /// alongside a sauce rather than instead of one.
+  DRIZZLE
+}
+
+/// Flavours cut from the same cheesecake.
+///
+/// Two ways of finishing one cake still come out of the same eight slices,
+/// so they share a count rather than each having their own. A flavour
+/// belongs to at most one group — a slice can't come from two cakes.
+model StockGroup {
+  id        String   @id @default(cuid())
+  /// Shown to customers as the heading above the flavours in it.
+  name      String
+  /// Slices in the cake. Overridable per date, like a flavour's own stock.
+  stock     Int      @default(8)
+  active    Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+/// A group's stock for one particular date.
+model DayGroupStock {
+  day     DateTime
+  groupId String
+  stock   Int
+
+  @@id([day, groupId])
+}
+
+/// A ceiling on one flavour inside a group, for one date.
+///
+/// Optional: with none set the group is a straight shared pool. With them
+/// set, a flavour can't take more than its share even if the cake has slices
+/// left — which is how "give the rest to Brownie & Clyde" works, by dropping
+/// the others to what they've already sold.
+model DayFlavourCap {
+  day       DateTime
+  flavourId String
+  cap       Int
+
+  @@id([day, flavourId])
+}
+
+/// Someone waiting for a sold-out flavour to come back.
+///
+/// Fired by the count moving above zero, whatever caused it — more baked, an
+/// order cancelled, a checkout released. Watching the number rather than the
+/// reason means a cause nobody thought of still works.
+model StockAlert {
+  id        String   @id @default(cuid())
+  email     String
+  flavourId String
+  /// Set for "just this date". Null means any date.
+  day       DateTime?
+  /// Keep telling them, or stop after the first.
+  repeating Boolean  @default(false)
+  /// When we last told them, so one return can't send twice.
+  lastSentAt DateTime?
+  /// Which date we last told them about, so a new date can still send.
+  lastSentFor DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([flavourId])
+  @@index([email])
 }
 
 model Extra {
@@ -53,6 +119,9 @@ model Extra {
   canTub     Boolean   @default(true)
   /// Whether this can be served warm, and whether the customer gets a say.
   warm       WarmOption @default(NEVER)
+  /// Same list as a flavour's. Shown to customers when this is added to a
+  /// slice, and copied onto the order at the time it's placed.
+  allergens  String[]  @default([])
   active     Boolean   @default(true)
   sortOrder  Int       @default(0)
 
@@ -93,11 +162,21 @@ model Flavour {
   sauceIds    String[] @default([])
   /// How many different sauces one slice can carry. Separate from the list
   /// above: you might offer three but allow only one.
+  /// 0 means no limit.
   maxSauces   Int      @default(1)
   /// Which toppings can be added. Empty means Add Toppings doesn't appear.
   toppingIds  String[] @default([])
   /// How many different toppings one slice can carry.
+  /// 0 means no limit.
   maxToppings Int      @default(2)
+  /// Which drizzles can go over the top, and how many. 0 means no limit.
+  drizzleIds  String[] @default([])
+  maxDrizzles Int      @default(1)
+  /// Shares its slice count with the other flavours in this group.
+  stockGroupId String?
+  /// Create Your Own: sauce is chosen first and required, toppings second
+  /// and optional. The first sauce is included in the slice price.
+  buildYourOwn Boolean @default(false)
   /// Default stock for this flavour on any date. A per-date figure set in
   /// Collection Dates overrides it.
   ///
@@ -185,6 +264,9 @@ model Order {
   cancelReason  String?
   /// Free text: the customer's message, or your own explanation.
   cancelNote    String?
+  /// Screenshots of the customer's cancellation message. Added when you
+  /// cancel, or any time after.
+  cancelProof   String[]  @default([])
   /// Made by the test tools rather than a real customer. Counts against stock
   /// like any other order, so sold-out states can be rehearsed, but can be
   /// wiped in one go.
@@ -381,6 +463,10 @@ model WholeOrder {
   cancelledAt  DateTime?
   cancelReason String?
   cancelNote   String?
+  cancelProof  String[]  @default([])
+  /// Screenshots of the messages the order was agreed in. Proof of what was
+  /// asked for, separate from proof of a cancellation.
+  orderProof   String[]  @default([])
   collectedAt  DateTime?
 
   /// Anything the customer asked for — a message on top, a particular

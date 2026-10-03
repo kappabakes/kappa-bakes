@@ -5,6 +5,7 @@ import {
   midnightUtc,
   nextOrderNo,
   slicesTaken,
+  flavourStock,
   dayWindow,
 } from "@/lib/stock";
 import { normaliseMobile, notifyCustomer, SliceLine } from "@/lib/notify";
@@ -38,6 +39,7 @@ export async function POST(req: Request) {
       addedSauceIds?: string[];
     warmSauceIds?: string[];
       addedToppingIds?: string[];
+    addedDrizzleIds?: string[];
     }[];
     paymentMethod: string;
     chargePence?: number;
@@ -59,10 +61,40 @@ export async function POST(req: Request) {
   if (!dayRow)
     return NextResponse.json({ error: "That date doesn't exist." }, { status: 404 });
 
-  // Capacity is a warning, not a wall — but you have to mean it.
+  /*
+   * Capacity is a warning, not a wall — but you have to mean it.
+   *
+   * A flavour with its own stock doesn't come out of the day's general pool,
+   * so only the rest count here. Counting everything meant that adding one
+   * special on a nearly-full day reported the day going over capacity when
+   * it wasn't — the same rule the website's checkout already follows.
+   */
+  const stock = await flavourStock(day);
+  const generalWanted = b.slices.filter(
+    (sl) => stock[sl.flavourId]?.stock == null
+  ).length;
+
   const taken = await slicesTaken(day);
-  const wouldBe = taken + b.slices.length;
-  if (wouldBe > dayRow.capacity && !b.force)
+  const wouldBe = taken + generalWanted;
+
+  // A special is checked against its own pool instead.
+  for (const [flavourId, row] of Object.entries(stock)) {
+    if (row.stock == null) continue;
+    const wanted = b.slices.filter((sl) => sl.flavourId === flavourId).length;
+    if (wanted === 0) continue;
+
+    const left = row.left ?? 0;
+    if (wanted > left && !b.force)
+      return NextResponse.json(
+        {
+          error: `That flavour has ${left} left for that date and you're adding ${wanted}. Confirm to add it anyway.`,
+          needsForce: true,
+        },
+        { status: 409 }
+      );
+  }
+
+  if (generalWanted > 0 && wouldBe > dayRow.capacity && !b.force)
     return NextResponse.json(
       {
         error: `That takes the day to ${wouldBe} slices, over its capacity of ${dayRow.capacity}. Confirm to add it anyway.`,

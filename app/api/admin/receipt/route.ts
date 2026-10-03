@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { currentAdmin } from "@/lib/auth";
 import { db, dayWindow } from "@/lib/stock";
 import { SliceLine } from "@/lib/notify";
+import { allergenRows } from "@/lib/extras";
 import { money, shortDay, SHOP, dayLabel } from "@/lib/config";
 import { collectionAddress } from "@/lib/settings";
 
@@ -64,14 +65,15 @@ export async function GET(req: Request) {
        * flavour's allergens can be edited later, and a record that moved
        * with them would be worthless in a dispute.
        */
-      byFlavour: Object.entries(
-        (order.slices as unknown as { flavour: string; allergens?: string[] }[])
-          .reduce<Record<string, string[]>>((acc, s) => {
-            if (!acc[s.flavour]) acc[s.flavour] = s.allergens ?? [];
-            return acc;
-          }, {})
-      ).map(([flavour, list]) => ({ flavour, allergens: list })),
+      // Same grouping as the order page and the email: added sauces and
+      // toppings on their own lines, except on Create Your Own.
+      byFlavour: allergenRows(order.slices as never).map((r) => ({
+        flavour:
+          r.kind === "Flavour" ? r.name : `${r.name} (${r.kind.toLowerCase()})`,
+        allergens: r.allergens,
+      })),
     },
+    cancelProof: order.cancelProof ?? [],
     cancellation: order.cancelledAt
       ? {
           at: order.cancelledAt,

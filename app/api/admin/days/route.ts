@@ -13,6 +13,7 @@ import {
 import { dayLabel } from "@/lib/config";
 import { windowOpensAt } from "@/lib/status";
 import { OrderStatus } from "@prisma/client";
+import { runStockAlerts } from "@/lib/alerts";
 
 export const dynamic = "force-dynamic";
 const authed = () => Boolean(currentAdmin());
@@ -25,6 +26,7 @@ type Slice = {
   addedSauce?: { name: string } | null;
   addedSauces?: { name: string; warm?: boolean }[] | null;
   addedToppings?: { name: string }[] | null;
+  addedDrizzles?: { name: string }[] | null;
 };
 
 /** What to bake, and how it's dressed. Rebuilt on every load so edits show. */
@@ -92,6 +94,11 @@ async function breakdown(day: Date) {
         r.sauces[s.addedSauce.name] = (r.sauces[s.addedSauce.name] ?? 0) + 1;
       for (const t of s.addedToppings ?? [])
         r.toppings[t.name] = (r.toppings[t.name] ?? 0) + 1;
+      // Counted with the sauces: it's poured, not placed, so it's the sauce
+      // bottles you'll be reaching for.
+      for (const t of s.addedDrizzles ?? [])
+        r.sauces[`${t.name} (drizzle)`] =
+          (r.sauces[`${t.name} (drizzle)`] ?? 0) + 1;
 
       rows.set(s.flavour, r);
     }
@@ -126,14 +133,27 @@ async function shape(d: {
   // separately — otherwise the admin says nothing's left while the shop is
   // still selling specials.
   const perFlavour = await flavourStock(d.day);
+  const flavourNames = new Map(
+    (
+      await db.flavour.findMany({ select: { id: true, name: true } })
+    ).map((f) => [f.id, f.name])
+  );
   let specialLeft = 0;
   let specialCapacity = 0;
+  const countedGroups = new Set<string>();
   for (const row of Object.values(perFlavour)) {
     // A special not offered on this date contributes nothing. Its stock
     // figure still exists — it's what the flavour makes on a date it IS
     // offered — but counting it here would show slices that can't be sold.
     if (!row.offered) continue;
     if (row.stock === null || row.stock === undefined) continue;
+
+    // A shared cake counts once, however many flavours draw on it.
+    if (row.group) {
+      if (countedGroups.has(row.group.id)) continue;
+      countedGroups.add(row.group.id);
+    }
+
     specialLeft += row.left ?? 0;
     specialCapacity += row.stock;
   }
@@ -162,6 +182,72 @@ async function shape(d: {
         reservedUntil: { gt: new Date() },
       },
     }),
+    /*
+     * Which limit is actually biting each flavour. With a day capacity, a
+     * flavour's own stock, a per-date override, selected dates and now a
+     * shared cake, a number that looks wrong takes working out — this says
+     * which rule produced it.
+     */
+    /*
+     * Shared cakes on this date, with each flavour's sold count and cap, so
+     * the day view can divide one between its flavours without another
+     * round trip.
+     */
+    groups: (() => {
+      const byGroup = new Map<
+        string,
+        {
+          id: string;
+          name: string;
+          stock: number;
+          rows: {
+            flavourId: string;
+            name: string;
+            sold: number;
+            cap: number | null;
+            groupLeft: number;
+          }[];
+        }
+      >();
+
+      for (const [id, row] of Object.entries(perFlavour)) {
+        if (!row.group) continue;
+        const g =
+          byGroup.get(row.group.id) ?? {
+            id: row.group.id,
+            name: row.group.name,
+            stock: row.group.stock,
+            rows: [],
+          };
+        g.rows.push({
+          flavourId: id,
+          name: flavourNames.get(id) ?? id,
+          sold: row.sold,
+          cap: row.cap ?? null,
+          groupLeft: row.group.left,
+        });
+        byGroup.set(row.group.id, g);
+      }
+
+      return [...byGroup.values()];
+    })(),
+
+    limits: Object.entries(perFlavour).map(([id, row]) => ({
+      flavourId: id,
+      limit: !row.offered
+        ? "not offered this date"
+        : row.group
+          ? `group "${row.group.name}"`
+          : row.stock === null || row.stock === undefined
+            ? "day's capacity"
+            : "its own stock",
+      // Falls back to the day's own figures for a flavour drawing on the
+      // general pool, which has no count of its own.
+      left: row.offered
+        ? (row.left ?? Math.max(0, d.capacity - taken))
+        : 0,
+      of: row.stock ?? d.capacity,
+    })),
     specialLeft,
     specialCapacity,
     breakdown: await breakdown(d.day),
@@ -291,6 +377,9 @@ export async function POST(req: Request) {
   } catch {
     /* table not there yet */
   }
+
+  // Raising a day's capacity can put slices back on sale.
+  await runStockAlerts();
 
   return NextResponse.json({ ok: true });
 }

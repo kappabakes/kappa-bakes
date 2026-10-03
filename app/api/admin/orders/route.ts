@@ -10,6 +10,14 @@ import {
 import { notifyCustomer, normaliseMobile, SliceLine } from "@/lib/notify";
 import { collectionAddress } from "@/lib/settings";
 import { priceSlices } from "@/lib/extras";
+import { runStockAlerts } from "@/lib/alerts";
+import {
+  buildCollectedEmail,
+  buildNoShowEmail,
+  buildCancelledEmail,
+  refundLine,
+  sendStatusEmail,
+} from "@/lib/notify-status";
 
 import { OrderStatus } from "@prisma/client";
 
@@ -51,17 +59,29 @@ type Patch = {
   dayIso?: string;
   status?: OrderStatus;
   adminNotes?: string;
+  /// The full shape the edit dialog sends — priceSlices reads all of it.
   slices?: {
     flavourId: string;
     toppings: string | null;
     extraSauce?: string | null;
+    separate?: boolean;
+    addedSauceIds?: string[];
+    warmSauceIds?: string[];
+    addedToppingIds?: string[];
+    addedDrizzleIds?: string[];
   }[];
   /// Send both, or just one — a wrong mobile shouldn't mean re-emailing.
   resend?: boolean;
   resendEmail?: boolean;
   resendSms?: boolean;
   /// Cancelling needs a reason, so the record explains itself later.
-  cancel?: { reason: string; note?: string } | null;
+  cancel?: {
+    reason: string;
+    note?: string;
+    sendEmail?: boolean;
+    refund?: "NONE" | "FULL" | "PARTIAL" | "NOTHING_PAID";
+    refundPence?: number;
+  } | null;
 };
 
 /**
@@ -173,6 +193,55 @@ export async function POST(req: Request) {
         detail: changes.join("; "),
       },
     });
+
+  /*
+   * Status emails. Collected and no-show go out on their own; a cancellation
+   * only when you ask for one, because whether to tell someone depends
+   * entirely on why it was cancelled.
+   */
+  const became = data.status && data.status !== existing.status ? data.status : null;
+
+  if (became === OrderStatus.COLLECTED || became === OrderStatus.NO_SHOW) {
+    const built =
+      became === OrderStatus.COLLECTED
+        ? buildCollectedEmail(order.firstName, order.orderNo)
+        : buildNoShowEmail(order.firstName, order.orderNo);
+
+    const status = await sendStatusEmail(order.email, built);
+    await db.orderEvent.create({
+      data: {
+        orderId: order.id,
+        kind:
+          became === OrderStatus.COLLECTED
+            ? "Collection email sent"
+            : "No-show email sent",
+        detail: `Email ${status}.`,
+      },
+    });
+  }
+
+  if (b.cancel?.sendEmail) {
+    const built = buildCancelledEmail(
+      order.firstName,
+      refundLine(
+        b.cancel.refund ?? "NONE",
+        order.totalPence,
+        b.cancel.refundPence
+      ),
+      order.orderNo
+    );
+    const status = await sendStatusEmail(order.email, built);
+    await db.orderEvent.create({
+      data: {
+        orderId: order.id,
+        kind: "Cancellation email sent",
+        detail: `Email ${status}.`,
+      },
+    });
+  }
+
+  // A no-show frees its slices, and so does putting an order back.
+  if (became) await runStockAlerts();
 
   const wantsEmail = Boolean(b.resend || b.resendEmail);
   const wantsSms = Boolean(b.resend || b.resendSms);

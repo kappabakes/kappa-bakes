@@ -1,6 +1,7 @@
 "use client";
 
 import { SmartLink } from "./SmartLink";
+import { OrderMenu } from "./OrderMenu";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { SHOP } from "@/lib/config";
@@ -76,13 +77,7 @@ export function Header() {
                 Track My
                 <br className="sm:hidden" /> Order
               </SmartLink>
-              <SmartLink
-                href="/order"
-                className="rounded-btn bg-gold px-3 py-2 text-center text-[12px] font-semibold uppercase leading-tight tracking-wide text-white transition-colors hover:bg-gold-hover sm:whitespace-nowrap sm:px-6 sm:text-sm"
-              >
-                Order
-                <br className="sm:hidden" /> Now
-              </SmartLink>
+              <OrderMenu />
             </div>
           </div>
         </nav>

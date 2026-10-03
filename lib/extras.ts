@@ -26,6 +26,8 @@ export type SliceChoice = {
   /// that's always warm or never offered warm.
   warmSauceIds?: string[];
   addedToppingIds?: string[];
+  /// Poured over the top, after any toppings.
+  addedDrizzleIds?: string[];
 };
 
 export type PricedLine = {
@@ -46,13 +48,19 @@ export type PricedLine = {
     pricePence: number;
     placement?: string;
     warm?: boolean;
+    allergens?: string[];
   }[];
   addedSauceIds: string[];
   warmSauceIds: string[];
-  addedToppings: { name: string; pricePence: number }[];
+  addedToppings: { name: string; pricePence: number; allergens?: string[] }[];
   addedToppingIds: string[];
+  addedDrizzles: { name: string; pricePence: number; allergens?: string[] }[];
+  addedDrizzleIds: string[];
   pricePence: number;
   allergens: string[];
+  /// Create Your Own: its allergens are shown as one combined list rather
+  /// than split by sauce and topping.
+  buildYourOwn?: boolean;
 };
 
 /**
@@ -104,11 +112,16 @@ export async function priceSlices(
     }
 
     const wantedSauces = c.addedSauceIds ?? [];
-    if (wantedSauces.length > f.maxSauces)
+    // 0 is "no limit", which only Create Your Own is expected to use.
+    if (f.maxSauces > 0 && wantedSauces.length > f.maxSauces)
       return {
         lines: [],
         error: `${f.name} takes up to ${f.maxSauces} sauce${f.maxSauces === 1 ? "" : "s"}.`,
       };
+    // Create Your Own is built on a sauce — without one it's a plain slice
+    // at a different price.
+    if (f.buildYourOwn && wantedSauces.length === 0)
+      return { lines: [], error: `Choose a sauce for your ${f.name}.` };
     if (new Set(wantedSauces).size !== wantedSauces.length)
       return { lines: [], error: "Each sauce can only be chosen once." };
 
@@ -133,11 +146,12 @@ export async function priceSlices(
         // of the order is in a tub — so the record says what actually
         // happens rather than what was asked for.
         placement: e.canTub ? placement : "on the slice",
+        allergens: e.allergens,
       });
     }
 
     const wanted = c.addedToppingIds ?? [];
-    if (wanted.length > f.maxToppings)
+    if (f.maxToppings > 0 && wanted.length > f.maxToppings)
       return {
         lines: [],
         error: `${f.name} takes up to ${f.maxToppings} topping${f.maxToppings === 1 ? "" : "s"}.`,
@@ -152,13 +166,53 @@ export async function priceSlices(
       const e = byId.get(id);
       if (!e)
         return { lines: [], error: "That topping is no longer available." };
-      addedToppings.push({ name: e.name, pricePence: e.pricePence });
+      addedToppings.push({
+        name: e.name,
+        pricePence: e.pricePence,
+        allergens: e.allergens,
+      });
     }
+
+    // Drizzles: poured over whatever's already there, so they're checked the
+    // same way as toppings but kept as their own list.
+    const wantedDrizzles = c.addedDrizzleIds ?? [];
+    if (f.maxDrizzles > 0 && wantedDrizzles.length > f.maxDrizzles)
+      return {
+        lines: [],
+        error: `${f.name} takes up to ${f.maxDrizzles} drizzle${f.maxDrizzles === 1 ? "" : "s"}.`,
+      };
+    if (new Set(wantedDrizzles).size !== wantedDrizzles.length)
+      return { lines: [], error: "Each drizzle can only be chosen once." };
+
+    const addedDrizzles: PricedLine["addedDrizzles"] = [];
+    for (const id of wantedDrizzles) {
+      if (!f.drizzleIds.includes(id))
+        return { lines: [], error: `That drizzle isn't available on ${f.name}.` };
+      const e = byId.get(id);
+      if (!e)
+        return { lines: [], error: "That drizzle is no longer available." };
+      addedDrizzles.push({
+        name: e.name,
+        pricePence: e.pricePence,
+        allergens: e.allergens,
+      });
+    }
+
+    /*
+     * On Create Your Own the first sauce is part of the slice — you can't
+     * have one without — so only a second is charged. Elsewhere every added
+     * sauce is an extra.
+     */
+    const sauceCharge = addedSauces.reduce(
+      (n, x, i) => n + (f.buildYourOwn && i === 0 ? 0 : x.pricePence),
+      0
+    );
 
     const pricePence =
       f.pricePence +
       (extraSauce ? extraSaucePence(extraSauce) : 0) +
-      addedSauces.reduce((n, x) => n + x.pricePence, 0) +
+      sauceCharge +
+      addedDrizzles.reduce((n, x) => n + x.pricePence, 0) +
       addedToppings.reduce((n, t) => n + t.pricePence, 0);
 
     lines.push({
@@ -171,7 +225,10 @@ export async function priceSlices(
         : null,
       // Only worth stating when there's something to place.
       placement:
-        f.hasToppings || addedSauces.length > 0 || addedToppings.length > 0
+        f.hasToppings ||
+      addedSauces.length > 0 ||
+      addedToppings.length > 0 ||
+      addedDrizzles.length > 0
         ? placement
         : null,
       extraSauce,
@@ -183,8 +240,11 @@ export async function priceSlices(
         .filter((x): x is string => Boolean(x)),
       addedToppings,
       addedToppingIds: wanted,
+      addedDrizzles,
+      addedDrizzleIds: wantedDrizzles,
       pricePence,
       allergens: f.allergens,
+      buildYourOwn: f.buildYourOwn,
     });
   }
 
@@ -198,6 +258,7 @@ export function describeSlice(l: {
   extraSauce?: string | null;
   addedSauces?: { name: string; warm?: boolean }[] | null;
   addedToppings?: { name: string }[] | null;
+  addedDrizzles?: { name: string }[] | null;
 }): string[] {
   const bits: string[] = [];
   if (l.toppings) bits.push(`Toppings ${l.toppings}`);
@@ -209,7 +270,79 @@ export function describeSlice(l: {
         .map((x) => (x.warm ? `${x.name} (warm)` : x.name))
         .join(", ")}`
     );
+  if (l.addedDrizzles?.length)
+    bits.push(
+      `${l.addedDrizzles.length === 1 ? "Drizzle" : "Drizzles"}: ${l.addedDrizzles.map((x) => x.name).join(", ")}`
+    );
   if (l.addedToppings?.length)
     bits.push(`Toppings: ${l.addedToppings.map((t) => t.name).join(", ")}`);
   return bits;
 }
+
+
+/**
+ * What to show someone before they pay, and what gets stored.
+ *
+ * A normal flavour lists separately from anything added to it, so it's
+ * clear what the addition brought. Create Your Own is one thing they've
+ * built, so everything on it is combined under its name.
+ */
+/** What an allergen row is attached to. */
+export type AllergenRowKind = "Flavour" | "Sauce" | "Topping" | "Drizzle";
+
+export function allergenRows(
+  lines: {
+    flavour: string;
+    allergens?: string[];
+    buildYourOwn?: boolean;
+    addedSauces?: { name: string; allergens?: string[] }[] | null;
+    addedToppings?: { name: string; allergens?: string[] }[] | null;
+    addedDrizzles?: { name: string; allergens?: string[] }[] | null;
+  }[]
+): { name: string; kind: AllergenRowKind; allergens: string[] }[] {
+  const rows = new Map<
+    string,
+    { name: string; kind: AllergenRowKind; allergens: Set<string> }
+  >();
+
+  const add = (
+    key: string,
+    name: string,
+    kind: AllergenRowKind,
+    list: string[] = []
+  ) => {
+    const row = rows.get(key) ?? { name, kind, allergens: new Set<string>() };
+    list.forEach((a) => row.allergens.add(a));
+    rows.set(key, row);
+  };
+
+  for (const l of lines) {
+    if (l.buildYourOwn) {
+      add(`f:${l.flavour}`, l.flavour, "Flavour", [
+        ...(l.allergens ?? []),
+        ...(l.addedSauces ?? []).flatMap((x) => x.allergens ?? []),
+        ...(l.addedToppings ?? []).flatMap((x) => x.allergens ?? []),
+        ...(l.addedDrizzles ?? []).flatMap((x) => x.allergens ?? []),
+      ]);
+      continue;
+    }
+
+    add(`f:${l.flavour}`, l.flavour, "Flavour", l.allergens);
+    for (const x of l.addedSauces ?? [])
+      add(`s:${x.name}`, x.name, "Sauce", x.allergens);
+    for (const x of l.addedToppings ?? [])
+      add(`t:${x.name}`, x.name, "Topping", x.allergens);
+    for (const x of l.addedDrizzles ?? [])
+      add(`d:${x.name}`, x.name, "Drizzle", x.allergens);
+  }
+
+  return [...rows.values()].map((r) => ({
+    name: r.name,
+    kind: r.kind,
+    allergens: [...r.allergens].sort(),
+  }));
+}
+
+/** Everything in the order, once each. */
+export const allAllergens = (rows: { allergens: string[] }[]) =>
+  [...new Set(rows.flatMap((r) => r.allergens))].sort();

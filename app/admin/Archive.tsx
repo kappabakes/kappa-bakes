@@ -26,6 +26,7 @@ type Slice = {
   addedSauces?: { name: string; placement?: string; warm?: boolean }[] | null;
   addedSauce?: { name: string } | null;
   addedToppings?: { name: string }[] | null;
+  addedDrizzles?: { name: string }[] | null;
 };
 
 type Order = {
@@ -60,6 +61,8 @@ function summarise(slices: Slice[]) {
     if (sauces.length) key += ` + SAUCE: ${sauces.join(", ")}`;
     if (s.addedToppings?.length)
       key += ` + TOPPINGS: ${s.addedToppings.map((t) => t.name).join(", ")}`;
+    if (s.addedDrizzles?.length)
+      key += ` + DRIZZLE: ${s.addedDrizzles.map((t) => t.name).join(", ")}`;
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
   return [...counts].map(([label, n]) => `${n}x ${label}`);

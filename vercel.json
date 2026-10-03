@@ -10,11 +10,11 @@
     },
     {
       "path": "/api/cron/collection-reminder",
-      "schedule": "0 8 * * *"
+      "schedule": "0 8,9 * * *"
     },
     {
       "path": "/api/cron/survey",
-      "schedule": "0 11 * * *"
+      "schedule": "0 11,12 * * *"
     },
     {
       "path": "/api/cron/prep",
